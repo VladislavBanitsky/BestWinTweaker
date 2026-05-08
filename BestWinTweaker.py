@@ -85,14 +85,14 @@ class WindowsTweaker:
         # Кнопка для управления автозагрузкой
         self.manage_autostart_button = ttk.Button(
             buttons_frame,
-            text="Управление автозагрузкой",
+            text="Автозагрузка приложений",
             command=self.manage_autostart,
             width=40
         )
         self.manage_autostart_button.grid(row=4, column=0, pady=5)
         
         # Привязываем события
-        self.manage_autostart_button.bind("<Enter>", lambda event: self.status_var.set("Выбор программ для автозагрузки (реестр + папка Startup)"))
+        self.manage_autostart_button.bind("<Enter>", lambda event: self.status_var.set("Отключение автозагрузки ускоряет систему"))
         self.manage_autostart_button.bind("<Leave>", lambda event: self.status_var.set("Готов"))
         
         if self.is_indexing_enabled():
@@ -240,64 +240,81 @@ class WindowsTweaker:
         self.status_var.set("Проверка обновлений запущена")
         messagebox.showinfo("Информация", "Проверка обновлений запущена (может занять время). Проверьте Центр обновлений Windows :)")
     
+    def get_disabled_folder_path(self, startup_path):
+        """Получить путь к папке с отключенными программами"""
+        return os.path.join(os.path.dirname(startup_path), "Disabled_Startup")
+    
     def get_startup_folder_programs(self):
-        """Получить программы из папки Startup"""
+        """Получить программы из папки Startup с актуальным состоянием"""
         startup_programs = []
-        
-        # Правильные пути к папке Startup
-        # Для текущего пользователя: %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
-        # Для всех пользователей: %PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs\Startup
         
         startup_paths = [
             os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'),
             os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'),
-            # Альтернативный путь для некоторых версий Windows
             os.path.join(os.environ.get('USERPROFILE', ''), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
         ]
         
-        # Убираем дубликаты
         startup_paths = list(dict.fromkeys(startup_paths))
         
-        print("=== Поиск папок Startup ===")
+        # Собираем все программы из папок Startup
         for startup_path in startup_paths:
-            print(f"Проверяем путь: {startup_path}")
             if os.path.exists(startup_path):
-                print(f"  ✅ Папка найдена!")
                 try:
-                    items = os.listdir(startup_path)
-                    print(f"  Найдено элементов: {len(items)}")
-                    
-                    for item in items:
+                    for item in os.listdir(startup_path):
                         item_path = os.path.join(startup_path, item)
-                        # Проверяем, что это файл
                         if os.path.isfile(item_path):
-                            # Показываем только .lnk, .exe, .bat, .cmd, .vbs
                             if item.lower().endswith(('.lnk', '.exe', '.bat', '.cmd', '.vbs', '.ps1')):
-                                print(f"    - {item}")
+                                # Проверяем, нет ли этой программы в Disabled_Startup
+                                disabled_folder = self.get_disabled_folder_path(startup_path)
+                                disabled_path = os.path.join(disabled_folder, item)
+                                
                                 startup_programs.append({
                                     "type": "folder",
                                     "display_name": os.path.splitext(item)[0],
                                     "filename": item,
                                     "full_path": item_path,
                                     "startup_path": startup_path,
-                                    "is_disabled": False,
-                                    "backup_path": None
+                                    "disabled_path": disabled_path,
+                                    "is_disabled": False
                                 })
-                            else:
-                                print(f"    - {item} (пропущен, не является исполняемым файлом)")
                 except Exception as e:
-                    print(f"  ❌ Ошибка при чтении папки: {e}")
-            else:
-                print(f"  ❌ Папка не найдена")
+                    print(f"Ошибка при чтении папки {startup_path}: {e}")
         
-        print(f"✅ Всего найдено программ в папке Startup: {len(startup_programs)}")
+        # Добавляем программы из папок Disabled_Startup
+        for startup_path in startup_paths:
+            disabled_folder = self.get_disabled_folder_path(startup_path)
+            if os.path.exists(disabled_folder):
+                try:
+                    for item in os.listdir(disabled_folder):
+                        item_path = os.path.join(disabled_folder, item)
+                        if os.path.isfile(item_path):
+                            if item.lower().endswith(('.lnk', '.exe', '.bat', '.cmd', '.vbs', '.ps1')):
+                                # Проверяем, не добавлена ли уже эта программа
+                                existing = False
+                                for prog in startup_programs:
+                                    if prog["filename"] == item and prog["startup_path"] == startup_path:
+                                        existing = True
+                                        break
+                                
+                                if not existing:
+                                    startup_programs.append({
+                                        "type": "folder",
+                                        "display_name": os.path.splitext(item)[0],
+                                        "filename": item,
+                                        "full_path": os.path.join(startup_path, item),
+                                        "startup_path": startup_path,
+                                        "disabled_path": item_path,
+                                        "is_disabled": True
+                                    })
+                except Exception as e:
+                    print(f"Ошибка при чтении папки {disabled_folder}: {e}")
+        
         return startup_programs
     
     def get_startup_registry_programs(self):
-        """Получить программы из реестра"""
+        """Получить программы из реестра с актуальным состоянием"""
         startup_programs = []
         
-        # Пути к автозагрузке в реестре
         registry_paths = [
             (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"),
             (winreg.HKEY_CURRENT_USER, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"),
@@ -305,25 +322,19 @@ class WindowsTweaker:
             (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run")
         ]
         
-        print("\n=== Поиск программ в реестре ===")
         for hive, reg_path in registry_paths:
             try:
                 key = winreg.OpenKey(hive, reg_path, 0, winreg.KEY_READ)
                 i = 0
-                count = 0
                 while True:
                     try:
                         name, value, _ = winreg.EnumValue(key, i)
-                        # Проверяем, не отключена ли уже программа
                         is_disabled = name.startswith("Disabled_")
                         original_name = name[9:] if is_disabled else name
-                        actual_name = original_name if is_disabled else name
-                        
-                        print(f"  Найдено: {actual_name} -> {value[:50]}...")
                         
                         startup_programs.append({
                             "type": "registry",
-                            "display_name": actual_name,
+                            "display_name": original_name,
                             "original_name": name,
                             "path": value,
                             "reg_hive": hive,
@@ -331,64 +342,47 @@ class WindowsTweaker:
                             "is_disabled": is_disabled
                         })
                         i += 1
-                        count += 1
                     except WindowsError:
                         break
                 winreg.CloseKey(key)
-                print(f"  Всего в {reg_path}: {count} записей")
             except WindowsError:
-                print(f"  Путь {reg_path} не найден")
+                pass
         
-        print(f"✅ Всего найдено программ в реестре: {len(startup_programs)}")
         return startup_programs
     
     def get_all_startup_programs(self):
-        """Получить все программы из автозагрузки (реестр + папка)"""
+        """Получить все программы из автозагрузки с актуальным состоянием"""
         all_programs = []
         
-        print("\n" + "="*50)
-        print("ПОИСК ПРОГРАММ В АВТОЗАГРУЗКЕ")
-        print("="*50)
-        
-        # Программы из реестра
         registry_programs = self.get_startup_registry_programs()
         all_programs.extend(registry_programs)
         
-        # Программы из папки Startup
         folder_programs = self.get_startup_folder_programs()
         all_programs.extend(folder_programs)
-        
-        print("\n" + "="*50)
-        print(f"ИТОГО НАЙДЕНО: {len(all_programs)} программ")
-        print("="*50 + "\n")
         
         return all_programs
     
     def manage_autostart(self):
-        """Открыть окно управления автозагрузкой с выбором программ"""
-        # Получаем список программ
+        """Открыть окно управления автозагрузкой"""
         programs = self.get_all_startup_programs()
         
         if not programs:
-            messagebox.showinfo("Информация", "Программы в автозагрузке не найдены!\n\nПроверьте:\n- Папку Startup\n- Реестр Windows")
+            messagebox.showinfo("Информация", "Программы в автозагрузке не найдены!")
             return
         
-        # Создаем окно
         autostart_window = tk.Toplevel(self.root)
         autostart_window.title("Управление автозагрузкой")
         autostart_window.geometry("650x550")
         autostart_window.resizable(False, False)
         
-        # Инструкция
         info_label = tk.Label(
             autostart_window, 
-            text=f"Выберите программы, которые хотите отключить в автозагрузке (найдено: {len(programs)})",
+            text=f"Настройка автозагрузки (найдено: {len(programs)})",
             font=("TkDefaultFont", 10, "bold"),
             pady=10
         )
         info_label.pack()
         
-        # Фрейм с чекбоксами (с прокруткой)
         frame_canvas = tk.Frame(autostart_window)
         frame_canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
@@ -407,23 +401,14 @@ class WindowsTweaker:
         canvas.pack(side="left", fill=tk.BOTH, expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Список чекбоксов
         checkboxes = []
         
-        # Разделитель для реестра
+        # Программы из реестра
         reg_programs = [p for p in programs if p["type"] == "registry"]
-        if reg_programs:
-            reg_label = tk.Label(
-                scrollable_frame,
-                text=f"Программы из реестра ({len(reg_programs)}):",
-                font=("TkDefaultFont", 9, "bold"),
-                fg="blue",
-                pady=5
-            )
-            reg_label.pack(anchor="w", padx=5)
         
         for program in reg_programs:
-            var = tk.BooleanVar(value=program["is_disabled"])
+            # Чекбокс отмечаем, если программа НЕ отключена (т.е. включена)
+            var = tk.BooleanVar(value=not program["is_disabled"])
             cb_frame = tk.Frame(scrollable_frame)
             cb_frame.pack(fill="x", padx=20, pady=2)
             
@@ -435,14 +420,13 @@ class WindowsTweaker:
             )
             cb.pack(side="left")
             
-            # Индикатор статуса
             if program["is_disabled"]:
                 status_label = tk.Label(cb_frame, text=" [ОТКЛЮЧЕНА]", fg="red", font=("TkDefaultFont", 8))
                 status_label.pack(side="left", padx=5)
+            else:
+                status_label = tk.Label(cb_frame, text=" [ВКЛЮЧЕНА]", fg="green", font=("TkDefaultFont", 8))
+                status_label.pack(side="left", padx=5)
             
-            cb_frame.pack(fill="x", padx=5)
-            
-            # Подпись с путем
             path_text = program["path"][:80] + "..." if len(program["path"]) > 80 else program["path"]
             path_label = tk.Label(
                 scrollable_frame,
@@ -452,7 +436,7 @@ class WindowsTweaker:
                 anchor="w",
                 wraplength=600
             )
-            path_label.pack(fill="x", padx=35, pady=5)
+            path_label.pack(fill="x", padx=35, pady=(0, 5))
             
             checkboxes.append({
                 "program": program,
@@ -460,20 +444,12 @@ class WindowsTweaker:
                 "type": "registry"
             })
         
-        # Разделитель для папки Startup
+        # Программы из папки Startup
         folder_programs = [p for p in programs if p["type"] == "folder"]
-        if folder_programs:
-            folder_label = tk.Label(
-                scrollable_frame,
-                text=f"Программы из папки Startup ({len(folder_programs)}):",
-                font=("TkDefaultFont", 9, "bold"),
-                fg="green",
-                pady=5
-            )
-            folder_label.pack(anchor="w", padx=5)
         
         for program in folder_programs:
-            var = tk.BooleanVar(value=False)
+            # Чекбокс отмечаем, если программа НЕ отключена (т.е. включена)
+            var = tk.BooleanVar(value=not program["is_disabled"])
             cb_frame = tk.Frame(scrollable_frame)
             cb_frame.pack(fill="x", padx=20, pady=2)
             
@@ -485,17 +461,20 @@ class WindowsTweaker:
             )
             cb.pack(side="left")
             
-            # Показываем тип файла
             file_ext = os.path.splitext(program["filename"])[1].upper()
             type_label = tk.Label(cb_frame, text=f" [{file_ext}]", fg="orange", font=("TkDefaultFont", 8))
             type_label.pack(side="left", padx=5)
             
-            cb_frame.pack(fill="x", padx=5)
+            if program["is_disabled"]:
+                status_label = tk.Label(cb_frame, text=" [ОТКЛЮЧЕНА]", fg="red", font=("TkDefaultFont", 8))
+                status_label.pack(side="left", padx=5)
+            else:
+                status_label = tk.Label(cb_frame, text=" [ВКЛЮЧЕНА]", fg="green", font=("TkDefaultFont", 8))
+                status_label.pack(side="left", padx=5)
             
-            # Подпись с путем
             path_label = tk.Label(
                 scrollable_frame,
-                text=f"  {program['full_path']}",
+                text=f"  {program['full_path'] if not program['is_disabled'] else program['disabled_path']}",
                 font=("TkDefaultFont", 8),
                 fg="gray",
                 anchor="w",
@@ -509,69 +488,51 @@ class WindowsTweaker:
                 "type": "folder"
             })
         
-        # Если нет программ в папке, покажем сообщение
-        if not folder_programs and reg_programs:
-            info_folder = tk.Label(
-                scrollable_frame,
-                text="  ℹ️ В папке Startup нет программ",
-                font=("TkDefaultFont", 8, "italic"),
-                fg="gray",
-                anchor="w"
-            )
-            info_folder.pack(fill="x", padx=35, pady=5)
-        
-        # Кнопки действий
         button_frame = tk.Frame(autostart_window)
         button_frame.pack(pady=10)
         
         def apply_changes():
-            """Применить изменения"""
-            changes_made = False
+            changes_count = 0
+            
             for item in checkboxes:
                 program = item["program"]
-                should_be_disabled = item["var"].get()
+                current_state = item["var"].get()  # True - должна быть включена, False - отключена
+                actual_state = not program["is_disabled"]  # True - включена, False - отключена
                 
-                if program["type"] == "registry":
-                    if should_be_disabled and not program["is_disabled"]:
-                        # Отключаем программу из реестра
-                        self.disable_single_program(program)
-                        changes_made = True
-                    elif not should_be_disabled and program["is_disabled"]:
-                        # Включаем программу обратно в реестр
-                        self.enable_single_program(program)
-                        changes_made = True
-                
-                elif program["type"] == "folder":
-                    if should_be_disabled and not program.get("is_disabled", False):
-                        # Перемещаем ярлык в папку Disabled_Startup
-                        self.disable_folder_program(program)
-                        changes_made = True
-                    elif not should_be_disabled and program.get("is_disabled", False):
-                        # Восстанавливаем ярлык из папки Disabled_Startup
-                        self.enable_folder_program(program)
-                        changes_made = True
+                # Если состояние изменилось
+                if current_state != actual_state:
+                    if item["type"] == "registry":
+                        if current_state:
+                            # Включить программу
+                            success = self.enable_single_program(program)
+                            if success:
+                                changes_count += 1
+                        else:
+                            # Отключить программу
+                            success = self.disable_single_program(program)
+                            if success:
+                                changes_count += 1
+                    elif item["type"] == "folder":
+                        if current_state:
+                            # Включить программу (вернуть из Disabled_Startup)
+                            success = self.enable_folder_program(program)
+                            if success:
+                                changes_count += 1
+                        else:
+                            # Отключить программу (переместить в Disabled_Startup)
+                            success = self.disable_folder_program(program)
+                            if success:
+                                changes_count += 1
             
-            if changes_made:
-                self.status_var.set("Изменения в автозагрузке применены")
-                messagebox.showinfo("Успех", "Изменения в автозагрузке применены!\nДля полного эффекта рекомендуется перезагрузить компьютер.")
+            if changes_count > 0:
+                self.status_var.set(f"Изменения применены: {changes_count} программ")
+                messagebox.showinfo("Успех", f"Изменения успешно применены для {changes_count} программ(ы)!\nДля полного эффекта рекомендуется перезагрузить компьютер.")
                 autostart_window.destroy()
             else:
                 messagebox.showinfo("Информация", "Изменений не было")
                 autostart_window.destroy()
         
-        def select_all():
-            """Выбрать все"""
-            for item in checkboxes:
-                item["var"].set(True)
-        
-        def deselect_all():
-            """Снять все"""
-            for item in checkboxes:
-                item["var"].set(False)
-        
         ttk.Button(button_frame, text="Применить", command=apply_changes).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Выбрать всё", command=select_all).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Снять всё", command=deselect_all).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Отмена", command=autostart_window.destroy).pack(side="left", padx=5)
     
     def disable_single_program(self, program):
@@ -581,10 +542,13 @@ class WindowsTweaker:
             if not program["original_name"].startswith("Disabled_"):
                 winreg.SetValueEx(key, f"Disabled_{program['original_name']}", 0, winreg.REG_SZ, program["path"])
                 winreg.DeleteValue(key, program["original_name"])
+                program["is_disabled"] = True
             winreg.CloseKey(key)
-            program["is_disabled"] = True
+            return True
         except WindowsError as e:
             print(f"Ошибка при отключении {program['display_name']}: {e}")
+            messagebox.showerror("Ошибка", f"Не удалось отключить {program['display_name']}")
+            return False
     
     def enable_single_program(self, program):
         """Включить одну программу обратно в реестр"""
@@ -594,56 +558,67 @@ class WindowsTweaker:
                 original_name = program["original_name"][9:]
                 winreg.SetValueEx(key, original_name, 0, winreg.REG_SZ, program["path"])
                 winreg.DeleteValue(key, program["original_name"])
+                program["is_disabled"] = False
             winreg.CloseKey(key)
-            program["is_disabled"] = False
+            return True
         except WindowsError as e:
             print(f"Ошибка при включении {program['display_name']}: {e}")
+            messagebox.showerror("Ошибка", f"Не удалось включить {program['display_name']}")
+            return False
     
     def disable_folder_program(self, program):
-        """Отключить программу из папки Startup (переместить в папку Disabled_Startup)"""
+        """Отключить программу из папки Startup (переместить в Disabled_Startup)"""
         try:
-            # Создаем папку для отключенных программ
-            disabled_folder = os.path.join(program["startup_path"], "..", "Disabled_Startup")
-            disabled_folder = os.path.normpath(disabled_folder)
+            disabled_folder = self.get_disabled_folder_path(program["startup_path"])
             
+            # Создаем папку Disabled_Startup если её нет
             if not os.path.exists(disabled_folder):
                 os.makedirs(disabled_folder)
                 print(f"Создана папка: {disabled_folder}")
             
-            # Новый путь для файла
-            new_path = os.path.join(disabled_folder, program["filename"])
-            
-            # Перемещаем файл
-            shutil.move(program["full_path"], new_path)
-            print(f"Перемещён файл: {program['filename']} -> {disabled_folder}")
-            
-            # Сохраняем информацию для восстановления
-            program["backup_path"] = new_path
-            program["is_disabled"] = True
-            
+            # Проверяем, существует ли файл в Startup
+            if os.path.exists(program["full_path"]):
+                # Перемещаем файл в Disabled_Startup
+                shutil.move(program["full_path"], program["disabled_path"])
+                program["is_disabled"] = True
+                print(f"Перемещён файл: {program['filename']} -> {disabled_folder}")
+                return True
+            else:
+                messagebox.showerror("Ошибка", f"Файл {program['filename']} не найден в папке Startup")
+                return False
+                
         except Exception as e:
             print(f"Ошибка при отключении {program['display_name']}: {e}")
             messagebox.showerror("Ошибка", f"Не удалось отключить {program['display_name']}: {str(e)}")
+            return False
     
     def enable_folder_program(self, program):
-        """Включить программу обратно в папку Startup"""
+        """Включить программу обратно в папку Startup (вернуть из Disabled_Startup)"""
         try:
-            if program.get("backup_path") and os.path.exists(program["backup_path"]):
-                # Перемещаем обратно
-                shutil.move(program["backup_path"], program["full_path"])
-                print(f"Восстановлен файл: {program['filename']}")
+            # Проверяем, существует ли файл в Disabled_Startup
+            if os.path.exists(program["disabled_path"]):
+                # Проверяем, существует ли папка Startup
+                if not os.path.exists(program["startup_path"]):
+                    os.makedirs(program["startup_path"])
+                
+                # Возвращаем файл обратно в Startup
+                shutil.move(program["disabled_path"], program["full_path"])
                 program["is_disabled"] = False
-                program["backup_path"] = None
+                print(f"Восстановлен файл: {program['filename']} -> {program['startup_path']}")
+                return True
+            else:
+                messagebox.showerror("Ошибка", f"Файл {program['filename']} не найден в папке Disabled_Startup")
+                return False
+                
         except Exception as e:
             print(f"Ошибка при включении {program['display_name']}: {e}")
             messagebox.showerror("Ошибка", f"Не удалось включить {program['display_name']}: {str(e)}")
+            return False
     
     def is_indexing_enabled(self):
         try:
-            # Выполняем команду sc query для службы Windows Search
             cmd = 'sc query "wsearch"'
             result = self.run_cmd(cmd)
-            # Проверяем, есть ли в выводе STATE : 4 RUNNING
             if '4  RUNNING' in result:
                 return True
             else:
@@ -667,7 +642,7 @@ class WindowsTweaker:
         messagebox.showinfo("Готово", "Индексация дисков включена")
     
     def about(self):
-        """ Окно с данными об устройстве """
+        """Окно с данными об устройстве"""
         pc_window = tk.Toplevel(self.root)
         pc_window.title(f"BestWinTweaker О программе")
         pc_window.resizable(width=False, height=False)
