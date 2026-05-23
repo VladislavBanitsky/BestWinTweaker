@@ -1,7 +1,6 @@
 import psutil
 import platform
 import datetime
-import GPUtil
 import customtkinter as ctk
 import threading
 import time
@@ -12,9 +11,35 @@ import os
 import shutil
 import winreg
 from PIL import Image, ImageTk
-import emoji
 
 from utilities import *
+
+# Для скрытого опроса видеокарты
+import subprocess
+import sys
+import os
+
+# Модифицируем subprocess.Popen глобально для всего приложения
+_original_popen = subprocess.Popen
+
+def _silent_popen(*args, **kwargs):
+    """Глобально скрываем все консольные окна"""
+    # Настройки для скрытия окон
+    if 'startupinfo' not in kwargs:
+        kwargs['startupinfo'] = subprocess.STARTUPINFO()
+        kwargs['startupinfo'].dwFlags = subprocess.STARTF_USESHOWWINDOW
+        kwargs['startupinfo'].wShowWindow = subprocess.SW_HIDE
+    
+    kwargs['creationflags'] = kwargs.get('creationflags', 0) | subprocess.CREATE_NO_WINDOW
+    kwargs['stdin'] = subprocess.DEVNULL
+    
+    return _original_popen(*args, **kwargs)
+
+# Применяем патч глобально
+subprocess.Popen = _silent_popen
+
+# Импортируем GPUtil после патча
+import GPUtil
 
 # Настройка внешнего вида customtkinter
 ctk.set_appearance_mode("light")
@@ -1120,9 +1145,46 @@ class ModernSystemMonitor:
             print(f"Disk update error: {e}")
     
     def update_gpu_info(self):
+        """Обновление информации о GPU в отдельном потоке (без зависаний)"""
         try:
-            gpus = GPUtil.getGPUs()
+            # Запускаем обновление в потоке
+            if not hasattr(self, '_gpu_updating'):
+                self._gpu_updating = False
             
+            if self._gpu_updating:
+                return  # Предыдущее обновление еще выполняется
+            
+            self._gpu_updating = True
+            
+            def _update_gpu_in_thread():
+                try:
+                    # Устанавливаем таймаут для GPU-запросов через отдельный поток
+                    import concurrent.futures
+                    
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(GPUtil.getGPUs)
+                        try:
+                            gpus = future.result(timeout=2.0)  # 2 секунды таймаут
+                        except concurrent.futures.TimeoutError:
+                            print("GPU check timeout")
+                            gpus = []
+                except Exception as e:
+                    print(f"GPU check error: {e}")
+                    gpus = []
+                
+                # Обновляем UI в главном потоке
+                self.window.after(0, lambda: self._update_gpu_ui(gpus))
+                self._gpu_updating = False
+            
+            threading.Thread(target=_update_gpu_in_thread, daemon=True).start()
+            
+        except Exception as e:
+            print(f"GPU update error: {e}")
+            self._gpu_updating = False
+    
+    def _update_gpu_ui(self, gpus):
+        """Обновление UI с информацией о GPU (выполняется в главном потоке)"""
+        try:
             if not gpus:
                 for widgets in self.gpu_widgets.values():
                     for widget in widgets:
@@ -1169,7 +1231,7 @@ class ModernSystemMonitor:
                         widget.destroy()
                     del self.gpu_widgets[gpu_id]
         except Exception as e:
-            print(f"GPU update error: {e}")
+            print(f"GPU UI update error: {e}")
     
     def update_time_info(self):
         try:
@@ -1179,8 +1241,11 @@ class ModernSystemMonitor:
             print(f"Time update error: {e}")
     
     def start_updates(self):
+        """Запуск всех потоков обновления"""
         self.update_thread = threading.Thread(target=self.update_stats, daemon=True)
         self.update_thread.start()
+        # Добавляем переменную для отслеживания потоков GPU
+        self._gpu_updating = False
     
     def run(self):
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
