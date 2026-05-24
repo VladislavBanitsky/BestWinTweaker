@@ -11,6 +11,7 @@ import os
 import shutil
 import winreg
 from PIL import Image, ImageTk
+import cpuinfo
 
 from utilities import *
 
@@ -867,8 +868,12 @@ class ModernSystemMonitor:
         cpu_header.pack(fill="x", padx=10, pady=(10, 5))
         cpu_header.pack_propagate(False)
         
-        ctk.CTkLabel(cpu_header, text="CPU - Центральный процессор",
+        ctk.CTkLabel(cpu_header, text=f"CPU - Центральный процессор",
                     font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
+        
+        self.cpu_name = ctk.CTkLabel(cpu_frame, text=cpuinfo.get_cpu_info()['brand_raw'],
+                                    font=ctk.CTkFont(size=16, weight="bold"))
+        self.cpu_name.pack(anchor="w", padx=10, pady=(5,0))
         
         self.cpu_progress = ctk.CTkProgressBar(cpu_frame, height=20)
         self.cpu_progress.pack(fill="x", pady=10, padx=20)
