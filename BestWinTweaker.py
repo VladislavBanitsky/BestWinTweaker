@@ -46,7 +46,7 @@ import GPUtil
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-VERSION = "1.6"
+VERSION = "1.7"
 
 class WindowsTweaker:
     """Класс с инструментами оптимизации Windows"""
@@ -342,7 +342,7 @@ class ModernSystemMonitor:
     def __init__(self):
         self.window = ctk.CTk()
         self.window.title("BestWinTweaker - Системный монитор и оптимизатор")
-        self.window.geometry("1400x850")
+        self.window.geometry("1400x750")
         self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
         
         # Переменные для обновления
@@ -397,7 +397,6 @@ class ModernSystemMonitor:
         self.create_cpu_section(left_column)
         self.create_ram_section(left_column)
         self.create_gpu_section(left_column)
-        self.create_system_info_section(left_column)
         self.create_network_section(right_column)
         self.create_disk_section(right_column)
     
@@ -506,7 +505,7 @@ class ModernSystemMonitor:
         
         try:
             logo_img = Image.open(resource_path('./resources/images/BestWinTweaker.png'))
-            desired_size = (512, 512)  # ИЛИ (256, 256) для более крупной иконки
+            desired_size = (256, 256)
             logo_img = logo_img.resize(desired_size, Image.Resampling.LANCZOS)
             logo_photo = ctk.CTkImage(light_image=logo_img, dark_image=logo_img, size=desired_size)
             logo_label = ctk.CTkLabel(logo_frame, image=logo_photo, text="")
@@ -925,32 +924,6 @@ class ModernSystemMonitor:
                                           font=ctk.CTkFont(size=16))
         self.ram_usage_label.pack(side="right", padx=10)
     
-    def create_system_info_section(self, parent):
-        sys_frame = ctk.CTkFrame(parent)
-        sys_frame.pack(fill="x", padx=10, pady=5)
-        
-        sys_header = ctk.CTkFrame(sys_frame, height=40)
-        sys_header.pack(fill="x", padx=10, pady=(10, 5))
-        sys_header.pack_propagate(False)
-        
-        ctk.CTkLabel(sys_header, text="СИСТЕМА",
-                    font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
-        
-        info_frame = ctk.CTkFrame(sys_frame)
-        info_frame.pack(fill="x", padx=20, pady=10)
-        
-        self.hostname = platform.node()
-        self.processor = platform.processor() or platform.machine()
-        
-        sys_info_text = f"Компьютер: {self.hostname}\n"
-        sys_info_text += f"Процессор: {self.processor}\n"
-        sys_info_text += f"Python: {platform.python_version()}\n"
-        sys_info_text += f"ОС: {platform.system()} {platform.release()}"
-        
-        self.sys_info_label = ctk.CTkLabel(info_frame, text=sys_info_text,
-                                         font=ctk.CTkFont(size=16), justify="left")
-        self.sys_info_label.pack(pady=10, padx=10)
-    
     def create_network_section(self, parent):
         net_frame = ctk.CTkFrame(parent)
         net_frame.pack(fill="x", padx=10, pady=5)
@@ -1206,7 +1179,7 @@ class ModernSystemMonitor:
                 
                 if gpu_id not in self.gpu_widgets:
                     gpu_card_frame = ctk.CTkFrame(self.gpu_container)
-                    gpu_card_frame.pack(fill="x", pady=5)
+                    gpu_card_frame.pack(fill="x", pady=0)
                     
                     name_label = ctk.CTkLabel(gpu_card_frame, text=gpu.name,
                                             font=ctk.CTkFont(size=16, weight="bold"))
