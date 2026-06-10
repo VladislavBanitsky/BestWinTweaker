@@ -18,6 +18,9 @@ from utilities import *
 import subprocess
 import os
 
+# Импортируем Fido интеграцию
+from fido_gui import FidoDownloadTab
+
 # Модифицируем subprocess.Popen глобально для всего приложения
 _original_popen = subprocess.Popen
 
@@ -46,7 +49,7 @@ import GPUtil
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-VERSION = "1.8"
+VERSION = "1.9 beta"
 
 
 class WindowsTweaker:
@@ -381,6 +384,10 @@ class ModernSystemMonitor:
         # Вкладка автозагрузки
         self.autostart_tab = self.tabview.add("Автозагрузка")
         self.setup_autostart_tab()
+
+        # НОВАЯ ВКЛАДКА: Скачивание Windows через Fido
+        self.download_tab = self.tabview.add("Скачать Windows")
+        self.fido_widget = FidoDownloadTab(self.download_tab, self)
 
         # Вкладка О программе
         self.about_tab = self.tabview.add("О программе")

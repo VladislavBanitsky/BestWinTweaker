@@ -17,8 +17,8 @@ def create_version_file():
 VSVersionInfo(
   ffi=FixedFileInfo(
     # filevers and prodvers should be a tuple of integers (major, minor, build, private)
-    filevers=(1, 8, 0, 0),
-    prodvers=(1, 8, 0, 0),
+    filevers=(1, 9, 0, 0),
+    prodvers=(1, 9, 0, 0),
     # Contains a bitmask that specifies the valid bits 'flags'
     mask=0x3f,
     # Contains a bitmask that specifies the Boolean attributes of the file.
@@ -39,12 +39,12 @@ VSVersionInfo(
         u'040904B0',
         [StringStruct(u'CompanyName', u'BestWinTweaker'),
         StringStruct(u'FileDescription', u'BestWinTweaker - Системный монитор и оптимизатор'),
-        StringStruct(u'FileVersion', u'1.8.0.0'),
+        StringStruct(u'FileVersion', u'1.9.0.0'),
         StringStruct(u'InternalName', u'BestWinTweaker'),
         StringStruct(u'LegalCopyright', u'Copyright © 2026'),
         StringStruct(u'OriginalFilename', u'BestWinTweaker.exe'),
         StringStruct(u'ProductName', u'BestWinTweaker'),
-        StringStruct(u'ProductVersion', u'1.8.0.0')])
+        StringStruct(u'ProductVersion', u'1.9.0.0')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]
@@ -65,7 +65,7 @@ args = [
     "--windowed",                   # Без консольного окна
     "--noconsole",                  # Без консоли (дубль)
     f"--icon={ICON_PATH}",
-    f"--version-file={version_file}",  # Файл с версией (правильный флаг)
+    f"--version-file={version_file}",  # Файл с версией
     "--add-data=./resources;./resources",  # Добавляем папку с ресурсами
     "--hidden-import=GPUtil",
     "--hidden-import=cpuinfo",
@@ -75,6 +75,9 @@ args = [
     "--hidden-import=psutil",
     "--hidden-import=platform",
     "--hidden-import=datetime",
+    "--hidden-import=requests",      # Добавлено для Fido
+    "--hidden-import=fido_integration",  # Добавлено для Fido
+    "--hidden-import=fido_gui",      # Добавлено для Fido
     "--collect-data=customtkinter",  # Собираем темы customtkinter
     "--uac-admin",                   # Запуск от администратора
     "--clean",                       # Очистка временных файлов
