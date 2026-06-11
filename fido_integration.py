@@ -12,6 +12,7 @@ import ctypes
 import re
 from pathlib import Path
 import requests
+import json
 
 # Для проверки прав администратора
 def is_admin():
@@ -29,51 +30,56 @@ def request_admin():
         )
         sys.exit()
 
+def get_windows_version():
+    """Получить версию Windows"""
+    try:
+        version = sys.getwindowsversion()
+        major = version.major
+        if major >= 10:
+            return "10/11"
+        elif major == 6 and version.minor == 1:
+            return "7"
+        elif major == 6 and version.minor == 2:
+            return "8"
+        elif major == 6 and version.minor == 3:
+            return "8.1"
+        else:
+            return "old"
+    except:
+        return "unknown"
+
 class FidoDownloader:
     """Класс для работы с Fido скриптом"""
-    
-    # Доступные версии Windows
-    VERSIONS = {
-        "11": "Windows 11",
-        "10": "Windows 10",
-        "8.1": "Windows 8.1",
-        "7": "Windows 7",
-        "2019": "Windows Server 2019",
-        "2022": "Windows Server 2022"
-    }
-    
-    # Доступные редакции
-    EDITIONS = {
-        "default": "Рекомендуемая редакция",
-        "professional": "Professional",
-        "home": "Home",
-        "education": "Education",
-        "enterprise": "Enterprise",
-        "pro_n": "Professional N",
-        "home_n": "Home N"
-    }
-    
-    # Доступные языки
-    LANGUAGES = {
-        "Russian": "Русский",
-        "English": "English (US)",
-        "Ukrainian": "Українська",
-        "German": "Deutsch",
-        "French": "Français",
-        "Spanish": "Español",
-        "Chinese": "中文 (简体)",
-        "Japanese": "日本語"
-    }
     
     def __init__(self):
         self.fido_script_path = None
         self.download_progress = ""
         self.is_downloading = False
         self.current_process = None
+        self.available_data = {
+            "versions": {},
+            "editions": {},
+            "languages": {},
+            "arches": ["x64", "x86", "arm64"]
+        }
+        self.is_fido_available = True
         
+    def check_fido_support(self):
+        """Проверить, поддерживается ли Fido на текущей системе"""
+        win_ver = get_windows_version()
+        if win_ver == "7" or win_ver == "old":
+            self.is_fido_available = False
+            return False
+        return True
+    
     def download_fido_script(self, progress_callback=None):
         """Скачать актуальную версию Fido.ps1 с GitHub"""
         try:
+            if not self.check_fido_support():
+                if progress_callback:
+                    progress_callback("Fido не поддерживается на Windows 7")
+                return False
+                
             if progress_callback:
                 progress_callback("Загрузка Fido скрипта...")
             
@@ -101,50 +107,80 @@ class FidoDownloader:
                 progress_callback(f"Ошибка загрузки Fido: {str(e)}")
             return False
     
-    def get_available_windows_versions(self):
-        """Получить список доступных версий Windows"""
-        return self.VERSIONS
-    
-    def get_iso_link(self, version="11", edition="default", language="Russian", 
-                     arch="x64", progress_callback=None):
-        """
-        Получить прямую ссылку на ISO образ
-        
-        Args:
-            version: Версия Windows ("11", "10", и т.д.)
-            edition: Редакция ("default", "professional", и т.д.)
-            language: Язык ("Russian", "English", и т.д.)
-            arch: Архитектура ("x64", "x86")
-            progress_callback: Функция для обновления статуса
-        """
-        
+    def get_available_data_from_fido(self, progress_callback=None):
+        """Получить актуальные данные из Fido скрипта"""
+        if not self.check_fido_support():
+            # Используем статические данные для Windows 7 (но Fido не будет работать)
+            self.available_data = {
+                "versions": {"11": "Windows 11", "10": "Windows 10"},
+                "editions": {
+                    "professional": "Professional",
+                    "home": "Home",
+                    "education": "Education",
+                    "enterprise": "Enterprise"
+                },
+                "languages": {
+                    "Russian": "Русский",
+                    "English": "English (US)"
+                },
+                "arches": ["x64", "x86"]
+            }
+            return self.available_data
+            
         if not self.fido_script_path or not os.path.exists(self.fido_script_path):
             if not self.download_fido_script(progress_callback):
-                return None
+                return self.available_data
         
         try:
             if progress_callback:
-                progress_callback(f"Запрос ссылки для Windows {version}...")
+                progress_callback("Получение списка доступных версий...")
             
-            # Создаем PowerShell команду с параметрами
-            # Используем -GetUrl для получения только ссылки
+            # Команда для получения всех доступных данных
             ps_command = f'''
             $scriptPath = "{self.fido_script_path}"
-            $WinVer = "{version}"
-            $Lang = "{language}"
-            $Arch = "{arch}"
-            $Edition = "{edition}"
-            
-            # Импортируем скрипт
             . $scriptPath
             
-            # Получаем ссылку (не скачиваем)
-            # Используем внутренние функции Fido
-            $url = Get-Fido -Win $WinVer -Lang $Lang -Arch $Arch -Edition $Edition -GetUrl
-            Write-Output $url
+            # Получаем список всех версий, редакций и языков
+            $result = @{{}}
+            
+            # Получаем версии (парсим вывод Get-Fido -List)
+            $output = Get-Fido -List 2>&1 | Out-String
+            
+            # Парсим версии Windows
+            $versions = @{{}}
+            if ($output -match 'Windows 11') {{ $versions["11"] = "Windows 11" }}
+            if ($output -match 'Windows 10') {{ $versions["10"] = "Windows 10" }}
+            if ($output -match 'Windows 8.1') {{ $versions["8.1"] = "Windows 8.1" }}
+            
+            $result["versions"] = $versions
+            
+            # Редакции (основные)
+            $editions = @{{
+                "professional" = "Professional"
+                "home" = "Home"
+                "education" = "Education"
+                "enterprise" = "Enterprise"
+            }}
+            $result["editions"] = $editions
+            
+            # Языки (основные)
+            $languages = @{{
+                "Russian" = "Русский"
+                "English" = "English (US)"
+                "Ukrainian" = "Українська"
+                "German" = "Deutsch"
+                "French" = "Français"
+                "Spanish" = "Español"
+                "Chinese" = "中文 (简体)"
+                "Japanese" = "日本語"
+            }}
+            $result["languages"] = $languages
+            
+            $result["arches"] = @("x64", "x86", "arm64")
+            
+            ConvertTo-Json $result -Compress
             '''
             
-            # Запускаем PowerShell скрыто
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags = subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = subprocess.SW_HIDE
@@ -159,32 +195,133 @@ class FidoDownloader:
             )
             
             if result.returncode == 0 and result.stdout:
-                # Извлекаем URL из вывода
+                try:
+                    data = json.loads(result.stdout.strip())
+                    if data.get("versions"):
+                        self.available_data["versions"] = data["versions"]
+                    if data.get("editions"):
+                        self.available_data["editions"] = data["editions"]
+                    if data.get("languages"):
+                        self.available_data["languages"] = data["languages"]
+                    if data.get("arches"):
+                        self.available_data["arches"] = data["arches"]
+                except json.JSONDecodeError:
+                    pass
+                    
+        except Exception as e:
+            if progress_callback:
+                progress_callback(f"Ошибка получения данных: {str(e)}")
+        
+        # Если данные не получены, используем значения по умолчанию
+        if not self.available_data["versions"]:
+            self.available_data["versions"] = {"11": "Windows 11", "10": "Windows 10"}
+        if not self.available_data["editions"]:
+            self.available_data["editions"] = {
+                "professional": "Professional",
+                "home": "Home",
+                "education": "Education",
+                "enterprise": "Enterprise"
+            }
+        if not self.available_data["languages"]:
+            self.available_data["languages"] = {"Russian": "Русский", "English": "English (US)"}
+            
+        return self.available_data
+    
+    def get_iso_link(self, version="11", edition="professional", language="Russian", 
+                     arch="x64", progress_callback=None):
+        """
+        Получить прямую ссылку на ISO образ
+        
+        Args:
+            version: Версия Windows ("11", "10", и т.д.)
+            edition: Редакция ("professional", "home", и т.д.)
+            language: Язык ("Russian", "English", и т.д.)
+            arch: Архитектура ("x64", "x86")
+            progress_callback: Функция для обновления статуса
+        """
+        
+        if not self.check_fido_support():
+            # Windows 7 - возвращаем ссылки на скачивание с сайта Microsoft
+            if progress_callback:
+                progress_callback("Windows 7 не поддерживает Fido, открываем страницу загрузки в браузере")
+            return None
+        
+        if not self.fido_script_path or not os.path.exists(self.fido_script_path):
+            if not self.download_fido_script(progress_callback):
+                return None
+        
+        try:
+            if progress_callback:
+                progress_callback(f"Запрос ссылки для Windows {version}...")
+            
+            # Подготовка параметров
+            win_param = version
+            if version == "11":
+                win_param = "11"
+            elif version == "10":
+                win_param = "10"
+            
+            # Создаем PowerShell команду для получения ссылки
+            ps_command = f'''
+            $scriptPath = "{self.fido_script_path}"
+            . $scriptPath
+            
+            # Получаем ссылку на ISO
+            $url = Get-Fido -Win "{win_param}" -Lang "{language}" -Arch "{arch}" -Edition "{edition}" -GetUrl
+            Write-Output $url
+            '''
+            
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags = subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            
+            result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_command],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                startupinfo=startupinfo,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                timeout=60
+            )
+            
+            if result.returncode == 0 and result.stdout:
                 output = result.stdout.strip()
                 # Ищем ссылку на ISO
                 url_match = re.search(r'https?://[^\s"\']+\.iso[^\s"\']*', output)
                 if url_match:
                     iso_url = url_match.group()
                     if progress_callback:
-                        progress_callback(f"Ссылка получена: {iso_url[:80]}...")
+                        progress_callback(f"Ссылка получена")
                     return iso_url
                 else:
-                    # Возможно ссылка в следующей строке
                     lines = output.split('\n')
                     for line in lines:
-                        if 'http' in line and '.iso' in line:
+                        if 'http' in line and ('.iso' in line or 'download' in line):
                             if progress_callback:
                                 progress_callback(f"Ссылка найдена")
                             return line.strip()
             
-            if progress_callback:
-                progress_callback(f"Ошибка: {result.stderr[:200]}")
+            if result.stderr:
+                if progress_callback:
+                    progress_callback(f"Ошибка PowerShell: {result.stderr[:100]}")
             return None
             
+        except subprocess.TimeoutExpired:
+            if progress_callback:
+                progress_callback("Таймаут получения ссылки")
+            return None
         except Exception as e:
             if progress_callback:
                 progress_callback(f"Ошибка: {str(e)}")
             return None
+    
+    def get_microsoft_download_url(self, version="11"):
+        """Получить URL для скачивания с сайта Microsoft"""
+        if version == "11":
+            return "https://www.microsoft.com/ru-ru/software-download/windows11"
+        else:
+            return "https://www.microsoft.com/ru-ru/software-download/windows10"
     
     def download_iso(self, iso_url, save_path, progress_callback=None, 
                      status_callback=None):
@@ -213,7 +350,7 @@ class FidoDownloader:
             }
             
             # Стриминговое скачивание
-            response = requests.get(iso_url, stream=True, headers=headers)
+            response = requests.get(iso_url, stream=True, headers=headers, timeout=30)
             response.raise_for_status()
             
             total_size = int(response.headers.get('content-length', 0))
@@ -244,7 +381,6 @@ class FidoDownloader:
                             progress = (downloaded / total_size) * 100
                             progress_callback(progress)
                             
-                            # Обновляем статус с размером
                             if status_callback:
                                 mb_downloaded = downloaded / (1024**2)
                                 mb_total = total_size / (1024**2)
@@ -270,86 +406,3 @@ class FidoDownloader:
                 self.current_process.terminate()
             except:
                 pass
-
-
-# Функция для получения списка доступных языков через Fido
-def get_available_languages():
-    """Получить актуальный список языков из Fido"""
-    try:
-        temp_script = os.path.join(tempfile.gettempdir(), "Fido_temp.ps1")
-        
-        # Скачиваем Fido если нет
-        if not os.path.exists(temp_script):
-            response = requests.get(
-                "https://raw.githubusercontent.com/pbatard/Fido/master/Fido.ps1",
-                timeout=10
-            )
-            with open(temp_script, 'w', encoding='utf-8') as f:
-                f.write(response.text)
-        
-        # Команда для получения списка языков
-        ps_command = f'''
-        $scriptPath = "{temp_script}"
-        . $scriptPath
-        Get-Fido -List
-        '''
-        
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags = subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = subprocess.SW_HIDE
-        
-        result = subprocess.run(
-            ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_command],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            startupinfo=startupinfo,
-            creationflags=subprocess.CREATE_NO_WINDOW
-        )
-        
-        # Парсим вывод для извлечения языков
-        languages = {}
-        if result.stdout:
-            for line in result.stdout.split('\n'):
-                # Ищем строки с языками (примерный паттерн)
-                if 'Language' in line or 'language' in line.lower():
-                    # Упрощенный парсинг
-                    pass
-        
-        return FidoDownloader.LANGUAGES
-        
-    except:
-        return FidoDownloader.LANGUAGES
-
-
-# Пример использования
-if __name__ == "__main__":
-    # Тестовый запуск
-    downloader = FidoDownloader()
-    
-    def progress_cb(progress):
-        print(f"Прогресс: {progress:.1f}%")
-    
-    def status_cb(status):
-        print(f"Статус: {status}")
-    
-    # Скачиваем скрипт
-    if downloader.download_fido_script(status_cb):
-        # Получаем ссылку
-        iso_url = downloader.get_iso_link(
-            version="11",
-            language="Russian",
-            progress_callback=status_cb
-        )
-        
-        if iso_url:
-            print(f"\nСсылка получена: {iso_url}\n")
-            
-            # Спрашиваем о скачивании
-            response = input("Скачать ISO? (y/n): ")
-            if response.lower() == 'y':
-                save_path = input("Путь для сохранения (Enter для Downloads): ").strip()
-                if not save_path:
-                    save_path = os.path.join(os.path.expanduser("~"), "Downloads", "Windows11.iso")
-                
-                downloader.download_iso(iso_url, save_path, progress_cb, status_cb)

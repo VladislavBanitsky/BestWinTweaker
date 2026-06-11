@@ -6,9 +6,10 @@ GUI компонент для интеграции Fido в BestWinTweaker
 import customtkinter as ctk
 import threading
 import os
+import webbrowser
 import tkinter as tk
 from tkinter import messagebox, filedialog
-from fido_integration import FidoDownloader, is_admin, request_admin
+from fido_integration import FidoDownloader, is_admin, request_admin, get_windows_version
 
 
 class FidoDownloadTab:
@@ -20,15 +21,13 @@ class FidoDownloadTab:
         self.downloader = FidoDownloader()
         self.is_downloading = False
         self.current_iso_url = None
+        self.is_loading_data = False
         
         self.setup_ui()
+        self.load_available_data()
         
     def setup_ui(self):
         """Настройка интерфейса вкладки"""
-        
-        # Проверка прав администратора
-        if not is_admin():
-            self.show_admin_warning()
         
         # Основной контейнер
         self.container = ctk.CTkFrame(self.parent)
@@ -44,11 +43,24 @@ class FidoDownloadTab:
         
         subtitle_label = ctk.CTkLabel(
             self.container,
-            text="Загрузка с официальных серверов Microsoft через Fido",
+            text="Загрузка с официальных серверов Microsoft",
             font=ctk.CTkFont(size=14),
             text_color="gray"
         )
         subtitle_label.pack(pady=(0, 20))
+        
+        # Предупреждение о Windows 7
+        if get_windows_version() == "7":
+            warning_frame = ctk.CTkFrame(self.container, fg_color="orange", corner_radius=10)
+            warning_frame.pack(fill="x", padx=20, pady=10)
+            
+            warning_label = ctk.CTkLabel(
+                warning_frame,
+                text="⚠️ Windows 7 не поддерживает автоматическое скачивание через Fido.\nБудет открыта страница загрузки Microsoft в браузере.",
+                font=ctk.CTkFont(size=12),
+                text_color="black"
+            )
+            warning_label.pack(pady=10)
         
         # Фрейм для параметров
         params_frame = ctk.CTkFrame(self.container)
@@ -62,14 +74,15 @@ class FidoDownloadTab:
         )
         version_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
         
-        self.version_var = ctk.StringVar(value="11")
-        version_menu = ctk.CTkOptionMenu(
+        self.version_var = ctk.StringVar(value="Загрузка...")
+        self.version_menu = ctk.CTkOptionMenu(
             params_frame,
-            values=list(self.downloader.VERSIONS.keys()),
+            values=["Загрузка..."],
             variable=self.version_var,
-            width=150
+            width=150,
+            state="disabled"
         )
-        version_menu.grid(row=0, column=1, padx=10, pady=10, sticky="w")
+        self.version_menu.grid(row=0, column=1, padx=10, pady=10, sticky="w")
         
         # Редакция Windows
         edition_label = ctk.CTkLabel(
@@ -79,14 +92,15 @@ class FidoDownloadTab:
         )
         edition_label.grid(row=0, column=2, padx=10, pady=10, sticky="w")
         
-        self.edition_var = ctk.StringVar(value="default")
-        edition_menu = ctk.CTkOptionMenu(
+        self.edition_var = ctk.StringVar(value="Загрузка...")
+        self.edition_menu = ctk.CTkOptionMenu(
             params_frame,
-            values=list(self.downloader.EDITIONS.keys()),
+            values=["Загрузка..."],
             variable=self.edition_var,
-            width=180
+            width=180,
+            state="disabled"
         )
-        edition_menu.grid(row=0, column=3, padx=10, pady=10, sticky="w")
+        self.edition_menu.grid(row=0, column=3, padx=10, pady=10, sticky="w")
         
         # Язык
         lang_label = ctk.CTkLabel(
@@ -96,14 +110,15 @@ class FidoDownloadTab:
         )
         lang_label.grid(row=1, column=0, padx=10, pady=10, sticky="w")
         
-        self.lang_var = ctk.StringVar(value="Russian")
-        lang_menu = ctk.CTkOptionMenu(
+        self.lang_var = ctk.StringVar(value="Загрузка...")
+        self.lang_menu = ctk.CTkOptionMenu(
             params_frame,
-            values=list(self.downloader.LANGUAGES.keys()),
+            values=["Загрузка..."],
             variable=self.lang_var,
-            width=150
+            width=150,
+            state="disabled"
         )
-        lang_menu.grid(row=1, column=1, padx=10, pady=10, sticky="w")
+        self.lang_menu.grid(row=1, column=1, padx=10, pady=10, sticky="w")
         
         # Архитектура
         arch_label = ctk.CTkLabel(
@@ -114,13 +129,13 @@ class FidoDownloadTab:
         arch_label.grid(row=1, column=2, padx=10, pady=10, sticky="w")
         
         self.arch_var = ctk.StringVar(value="x64")
-        arch_menu = ctk.CTkOptionMenu(
+        self.arch_menu = ctk.CTkOptionMenu(
             params_frame,
             values=["x64", "x86", "arm64"],
             variable=self.arch_var,
             width=100
         )
-        arch_menu.grid(row=1, column=3, padx=10, pady=10, sticky="w")
+        self.arch_menu.grid(row=1, column=3, padx=10, pady=10, sticky="w")
         
         # Путь сохранения
         path_label = ctk.CTkLabel(
@@ -156,24 +171,13 @@ class FidoDownloadTab:
         actions_frame = ctk.CTkFrame(self.container)
         actions_frame.pack(fill="x", padx=20, pady=20)
         
-        self.get_link_btn = ctk.CTkButton(
-            actions_frame,
-            text="Получить ссылку",
-            command=self.get_iso_link,
-            width=180,
-            height=40,
-            font=ctk.CTkFont(size=14, weight="bold")
-        )
-        self.get_link_btn.pack(side="left", padx=10)
-        
         self.download_btn = ctk.CTkButton(
             actions_frame,
             text="Скачать ISO",
             command=self.start_download,
-            width=180,
+            width=200,
             height=40,
             font=ctk.CTkFont(size=14, weight="bold"),
-            state="disabled",
             fg_color="green"
         )
         self.download_btn.pack(side="left", padx=10)
@@ -197,95 +201,133 @@ class FidoDownloadTab:
         # Статус
         self.status_label = ctk.CTkLabel(
             self.container,
-            text="Готов к работе",
+            text="Загрузка списка доступных версий...",
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
         self.status_label.pack(pady=5)
         
-    def show_admin_warning(self):
-        """Показать предупреждение о правах администратора"""
+    def load_available_data(self):
+        """Загрузить доступные данные из Fido"""
         
-        def request_elevation():
-            request_admin()
+        def load_thread():
+            if self.is_loading_data:
+                return
+            self.is_loading_data = True
             
-        warning_frame = ctk.CTkFrame(self.parent)
-        warning_frame.pack(fill="x", padx=20, pady=10)
+            try:
+                data = self.downloader.get_available_data_from_fido(
+                    lambda msg: self.parent.after(0, lambda: self.status_label.configure(text=msg))
+                )
+                
+                self.parent.after(0, lambda: self.update_menus(data))
+            except Exception as e:
+                self.parent.after(0, lambda: self.status_label.configure(text=f"Ошибка: {str(e)}"))
+            finally:
+                self.is_loading_data = False
         
-        warning_label = ctk.CTkLabel(
-            warning_frame,
-            text="⚠️ Для работы скачивания Windows требуются права администратора!",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="orange"
-        )
-        warning_label.pack(pady=10)
+        threading.Thread(target=load_thread, daemon=True).start()
+    
+    def update_menus(self, data):
+        """Обновить выпадающие списки"""
+        # Обновляем версии
+        versions = data.get("versions", {"11": "Windows 11", "10": "Windows 10"})
+        version_values = list(versions.keys())
+        version_display = [f"{k} - {v}" for k, v in versions.items()]
         
-        elevate_btn = ctk.CTkButton(
-            warning_frame,
-            text="Запросить права администратора",
-            command=request_elevation
-        )
-        elevate_btn.pack(pady=5)
+        self.version_menu.configure(values=version_display, state="normal")
+        if version_display:
+            self.version_var.set(version_display[0])
         
+        # Обновляем редакции
+        editions = data.get("editions", {
+            "professional": "Professional",
+            "home": "Home",
+            "education": "Education",
+            "enterprise": "Enterprise"
+        })
+        edition_display = [f"{k}: {v}" for k, v in editions.items()]
+        
+        self.edition_menu.configure(values=edition_display, state="normal")
+        if edition_display:
+            self.edition_var.set(edition_display[0])
+        
+        # Обновляем языки
+        languages = data.get("languages", {
+            "Russian": "Русский",
+            "English": "English (US)"
+        })
+        lang_display = [f"{k}: {v}" for k, v in languages.items()]
+        
+        self.lang_menu.configure(values=lang_display, state="normal")
+        if lang_display:
+            self.lang_var.set(lang_display[0])
+        
+        # Обновляем архитектуры
+        arches = data.get("arches", ["x64", "x86", "arm64"])
+        self.arch_menu.configure(values=arches, state="normal")
+        
+        self.status_label.configure(text="Выберите параметры и нажмите 'Скачать ISO'")
+    
+    def get_selected_version(self):
+        """Получить выбранную версию (ключ)"""
+        selected = self.version_var.get()
+        if " - " in selected:
+            return selected.split(" - ")[0]
+        return "11"
+    
+    def get_selected_edition(self):
+        """Получить выбранную редакцию (ключ)"""
+        selected = self.edition_var.get()
+        if ": " in selected:
+            return selected.split(": ")[0]
+        return "professional"
+    
+    def get_selected_language(self):
+        """Получить выбранный язык (ключ)"""
+        selected = self.lang_var.get()
+        if ": " in selected:
+            return selected.split(": ")[0]
+        return "Russian"
+    
     def browse_folder(self):
         """Выбор папки для сохранения"""
         folder = filedialog.askdirectory(title="Выберите папку для сохранения ISO")
         if folder:
             self.path_var.set(folder)
     
-    def get_iso_link(self):
-        """Получить ссылку на ISO"""
-        
-        def get_link_thread():
-            try:
-                self.get_link_btn.configure(state="disabled", text="Получение ссылки...")
-                self.status_label.configure(text="Получение ссылки...")
-                
-                iso_url = self.downloader.get_iso_link(
-                    version=self.version_var.get(),
-                    edition=self.edition_var.get(),
-                    language=self.lang_var.get(),
-                    arch=self.arch_var.get(),
-                    progress_callback=lambda msg: self.status_label.configure(text=msg)
-                )
-                
-                if iso_url:
-                    self.current_iso_url = iso_url
-                    self.status_label.configure(
-                        text=f"✅ Ссылка получена! Нажмите 'Скачать ISO' для начала загрузки",
-                        text_color="green"
-                    )
-                    self.download_btn.configure(state="normal")
-                    messagebox.showinfo(
-                        "Успех",
-                        f"Ссылка на ISO успешно получена!\n\n"
-                        f"Размер файла: ~5-6 GB\n"
-                        f"Для скачивания нажмите 'Скачать ISO'"
-                    )
-                else:
-                    self.status_label.configure(
-                        text="❌ Не удалось получить ссылку. Проверьте подключение к интернету",
-                        text_color="red"
-                    )
-                    messagebox.showerror("Ошибка", "Не удалось получить ссылку на ISO")
-                    
-            except Exception as e:
-                self.status_label.configure(text=f"❌ Ошибка: {str(e)}", text_color="red")
-                messagebox.showerror("Ошибка", str(e))
-            finally:
-                self.get_link_btn.configure(state="normal", text="Получить ссылку")
-        
-        threading.Thread(target=get_link_thread, daemon=True).start()
-    
     def start_download(self):
         """Начать скачивание ISO"""
         
-        if not self.current_iso_url:
-            messagebox.showwarning("Предупреждение", "Сначала получите ссылку на ISO")
+        # Проверка поддержки Fido на Windows 7
+        if get_windows_version() == "7":
+            version = self.get_selected_version()
+            url = self.downloader.get_microsoft_download_url(version)
+            webbrowser.open(url)
+            messagebox.showinfo(
+                "Открыт браузер",
+                f"Windows 7 не поддерживает автоматическое скачивание.\n"
+                f"Страница загрузки Windows {version} открыта в браузере."
+            )
+            return
+        
+        # Проверка прав администратора
+        if not is_admin():
+            result = messagebox.askyesno(
+                "Требуются права администратора",
+                "Для скачивания Windows через Fido требуются права администратора.\n\n"
+                "Запросить права администратора?"
+            )
+            if result:
+                request_admin()
             return
         
         # Запрашиваем имя файла
-        filename = f"Windows{self.version_var.get()}_{self.lang_var.get()}.iso"
+        version = self.get_selected_version()
+        edition = self.get_selected_edition()
+        lang = self.get_selected_language()
+        
+        filename = f"Windows{version}_{lang}_{edition}.iso"
         
         save_file = filedialog.asksaveasfilename(
             title="Сохранить ISO как...",
@@ -301,22 +343,42 @@ class FidoDownloadTab:
         def download_thread():
             try:
                 self.is_downloading = True
-                self.download_btn.configure(state="disabled")
+                self.download_btn.configure(state="disabled", text="Получение ссылки...")
                 self.cancel_btn.configure(state="normal")
-                self.get_link_btn.configure(state="disabled")
+                
+                # Получаем ссылку
+                def progress_msg(msg):
+                    self.parent.after(0, lambda: self.status_label.configure(text=msg))
+                
+                iso_url = self.downloader.get_iso_link(
+                    version=self.get_selected_version(),
+                    edition=self.get_selected_edition(),
+                    language=self.get_selected_language(),
+                    arch=self.arch_var.get(),
+                    progress_callback=progress_msg
+                )
+                
+                if not iso_url:
+                    self.parent.after(0, lambda: self.status_label.configure(
+                        text="❌ Не удалось получить ссылку. Возможно, выбранные параметры недоступны.",
+                        text_color="red"
+                    ))
+                    messagebox.showerror("Ошибка", "Не удалось получить ссылку на ISO.\n\nПопробуйте другие параметры.")
+                    return
+                
+                self.current_iso_url = iso_url
+                
+                # Скачиваем
+                self.parent.after(0, lambda: self.download_btn.configure(text="Скачивание..."))
                 
                 def progress_cb(progress):
-                    self.progress_bar.set(progress / 100)
-                    self.status_label.configure(
-                        text=f"Скачивание... {progress:.1f}%",
-                        text_color="blue"
-                    )
-                    # Обновляем GUI
-                    self.parent.update_idletasks()
+                    self.parent.after(0, lambda: self.progress_bar.set(progress / 100))
+                    self.parent.after(0, lambda: self.status_label.configure(
+                        text=f"Скачивание... {progress:.1f}%"
+                    ))
                 
                 def status_cb(status):
-                    self.status_label.configure(text=status)
-                    self.parent.update_idletasks()
+                    self.parent.after(0, lambda: self.status_label.configure(text=status))
                 
                 result = self.downloader.download_iso(
                     self.current_iso_url,
@@ -326,11 +388,11 @@ class FidoDownloadTab:
                 )
                 
                 if result:
-                    self.progress_bar.set(1)
-                    self.status_label.configure(
+                    self.parent.after(0, lambda: self.progress_bar.set(1))
+                    self.parent.after(0, lambda: self.status_label.configure(
                         text=f"✅ Скачивание завершено! Файл сохранен: {result}",
                         text_color="green"
-                    )
+                    ))
                     messagebox.showinfo(
                         "Успех",
                         f"ISO образ успешно скачан!\n\n"
@@ -338,18 +400,28 @@ class FidoDownloadTab:
                         f"Вы можете использовать этот ISO для установки Windows."
                     )
                 elif not self.is_downloading:
-                    self.status_label.configure(text="Скачивание отменено", text_color="orange")
+                    self.parent.after(0, lambda: self.status_label.configure(
+                        text="Скачивание отменено",
+                        text_color="orange"
+                    ))
                 else:
-                    self.status_label.configure(text="❌ Ошибка при скачивании", text_color="red")
+                    self.parent.after(0, lambda: self.status_label.configure(
+                        text="❌ Ошибка при скачивании",
+                        text_color="red"
+                    ))
                     
             except Exception as e:
-                self.status_label.configure(text=f"❌ Ошибка: {str(e)}", text_color="red")
+                self.parent.after(0, lambda: self.status_label.configure(
+                    text=f"❌ Ошибка: {str(e)}",
+                    text_color="red"
+                ))
                 messagebox.showerror("Ошибка", str(e))
             finally:
                 self.is_downloading = False
-                self.download_btn.configure(state="normal", text="Скачать ISO")
-                self.cancel_btn.configure(state="disabled")
-                self.get_link_btn.configure(state="normal")
+                self.parent.after(0, lambda: self.download_btn.configure(
+                    state="normal", text="Скачать ISO"
+                ))
+                self.parent.after(0, lambda: self.cancel_btn.configure(state="disabled"))
         
         threading.Thread(target=download_thread, daemon=True).start()
     
@@ -358,23 +430,3 @@ class FidoDownloadTab:
         self.downloader.cancel_download()
         self.is_downloading = False
         self.status_label.configure(text="Отмена скачивания...", text_color="orange")
-
-
-# Функция для добавления вкладки в основной интерфейс
-def add_fido_tab(tabview):
-    """Добавить вкладку Fido в Tabview основного приложения"""
-    fido_tab = tabview.add("Скачать Windows")
-    fido_widget = FidoDownloadTab(fido_tab)
-    return fido_widget
-
-
-# Пример использования для модификации BestWinTweaker.py
-def integrate_to_app(app_instance):
-    """
-    Интегрировать Fido в существующий экземпляр приложения
-    Используйте этот метод для добавления вкладки в ваше приложение
-    """
-    # Добавляем новую вкладку
-    fido_tab = app_instance.tabview.add("Скачать Windows")
-    fido_widget = FidoDownloadTab(fido_tab, app_instance)
-    return fido_widget
