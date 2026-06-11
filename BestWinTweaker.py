@@ -18,9 +18,6 @@ from utilities import *
 import subprocess
 import os
 
-# Импортируем Fido интеграцию
-from fido_gui import FidoDownloadTab
-
 # Модифицируем subprocess.Popen глобально для всего приложения
 _original_popen = subprocess.Popen
 
@@ -385,10 +382,6 @@ class ModernSystemMonitor:
         self.autostart_tab = self.tabview.add("Автозагрузка")
         self.setup_autostart_tab()
 
-        # НОВАЯ ВКЛАДКА: Скачивание Windows через Fido
-        self.download_tab = self.tabview.add("Скачать Windows")
-        self.fido_widget = FidoDownloadTab(self.download_tab, self)
-
         # Вкладка О программе
         self.about_tab = self.tabview.add("О программе")
         self.setup_about_tab()
@@ -492,8 +485,8 @@ class ModernSystemMonitor:
         # Кнопка открытия папки Temp
         self.open_temp_btn = ctk.CTkButton(
             buttons_grid,
-            text="Открыть папку Temp",
-            command=self.action_open_temp,
+            text="Скачать Windows",
+            command=self.action_win_download,
             width=250,
             height=60,
             font=ctk.CTkFont(size=14)
@@ -824,15 +817,9 @@ class ModernSystemMonitor:
 
         self.update_indexing_button_text()
 
-    def action_open_temp(self):
-        """Открыть папку Temp"""
-        temp_path = os.environ.get('TEMP', r"C:\Windows\Temp")
-        if os.path.exists(temp_path):
-            os.startfile(temp_path)
-            self.optimize_status_label.configure(text=f"Открыта папка {temp_path}", text_color="green")
-        else:
-            self.optimize_status_label.configure(text="Папка Temp не найдена", text_color="red")
-            messagebox.showerror("Ошибка", "Папка Temp не найдена")
+    def action_win_download(self):
+        """Скачать ISO Windows"""
+        start_download()
 
     def create_header(self):
         header = ctk.CTkFrame(self.main_container, height=60)
