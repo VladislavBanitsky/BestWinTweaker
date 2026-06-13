@@ -11,6 +11,7 @@ import winreg
 from PIL import Image
 import cpuinfo
 import multiprocessing
+import json
 
 from utilities import *
 
@@ -343,13 +344,136 @@ class WindowsTweaker:
         except:
             return False
 
+    @staticmethod
+    def get_uwp_apps():
+        """Получить список установленных UWP-приложений"""
+        try:
+            cmd = ['powershell', '-Command',
+                   'Get-AppxPackage | Select-Object Name, PackageFullName, InstallLocation, Version | ConvertTo-Json']
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+
+            if result.returncode == 0 and result.stdout:
+                apps_data = json.loads(result.stdout)
+                if isinstance(apps_data, dict):
+                    apps_data = [apps_data]
+
+                # Фильтруем системные приложения, которые лучше не удалять
+                protected_apps = [
+                    'Microsoft.WindowsStore',
+                    'Microsoft.StorePurchaseApp',
+                    'Microsoft.WindowsCalculator',
+                    'Microsoft.WindowsCamera',
+                    'Microsoft.Windows.Photos',
+                    'Microsoft.WindowsSoundRecorder',
+                    'Microsoft.WindowsCalculator',
+                    'Microsoft.MSPaint'
+                ]
+
+                apps = []
+                for app in apps_data:
+                    app_name = app.get('Name', 'Unknown')
+                    package_name = app.get('PackageFullName', '')
+                    install_location = app.get('InstallLocation', '')
+                    version = app.get('Version', '')
+
+                    # Пропускаем защищенные приложения
+                    is_protected = any(protected in app_name for protected in protected_apps)
+
+                    # Определяем категорию
+                    category = "Системные" if is_protected else "Пользовательские"
+
+                    apps.append({
+                        'name': app_name,
+                        'package_name': package_name,
+                        'install_location': install_location,
+                        'version': version,
+                        'size': WindowsTweaker.get_app_size(install_location),
+                        'is_protected': is_protected,
+                        'category': category
+                    })
+
+                return sorted(apps, key=lambda x: (x['category'], x['name']))
+            return []
+        except Exception as e:
+            print(f"Ошибка получения UWP-приложений: {e}")
+            return []
+
+    @staticmethod
+    def get_app_size(install_location):
+        """Получить размер установленного приложения"""
+        try:
+            if install_location and os.path.exists(install_location):
+                total_size = 0
+                for dirpath, dirnames, filenames in os.walk(install_location):
+                    for f in filenames:
+                        fp = os.path.join(dirpath, f)
+                        if os.path.exists(fp):
+                            total_size += os.path.getsize(fp)
+                return total_size
+            return 0
+        except:
+            return 0
+
+    @staticmethod
+    def remove_uwp_app(package_name):
+        """Удалить UWP-приложение"""
+        try:
+            cmd = ['powershell', '-Command',
+                   f'Get-AppxPackage *{package_name}* | Remove-AppxPackage']
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            return result.returncode == 0, result.stderr if result.stderr else "Успешно удалено"
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def remove_uwp_apps_for_all_users(package_name):
+        """Удалить UWP-приложение для всех пользователей"""
+        try:
+            cmd = ['powershell', '-Command',
+                   f'Get-AppxPackage *{package_name}* | Remove-AppxPackage -AllUsers']
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            return result.returncode == 0, result.stderr if result.stderr else "Успешно удалено"
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def reinstall_uwp_app(package_name):
+        """Переустановить UWP-приложение"""
+        try:
+            cmd = ['powershell', '-Command',
+                   f'Get-AppxPackage *{package_name}* | Foreach {{Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\\AppxManifest.xml"}}']
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            return result.returncode == 0, result.stderr if result.stderr else "Успешно переустановлено"
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def get_uwp_apps_statistics():
+        """Получить статистику по UWP-приложениям"""
+        apps = WindowsTweaker.get_uwp_apps()
+        total_apps = len(apps)
+        protected_apps = sum(1 for app in apps if app['is_protected'])
+        user_apps = total_apps - protected_apps
+
+        total_size = sum(app['size'] for app in apps)
+
+        return {
+            'total': total_apps,
+            'protected': protected_apps,
+            'user': user_apps,
+            'total_size': total_size
+        }
+
 
 class ModernSystemMonitor:
     def __init__(self):
         self.window = ctk.CTk()
         self.window.title("BestWinTweaker - Системный монитор и оптимизатор")
         self.window.geometry("1400x750")
-        self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
+        try:
+            self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
+        except:
+            pass
 
         # Переменные для обновления
         self.running = True
@@ -382,12 +506,499 @@ class ModernSystemMonitor:
         self.autostart_tab = self.tabview.add("Автозагрузка")
         self.setup_autostart_tab()
 
+        # Новая вкладка: Удаление UWP-приложений
+        self.uwp_tab = self.tabview.add("UWP-приложения")
+        self.setup_uwp_tab()
+
         # Вкладка О программе
         self.about_tab = self.tabview.add("О программе")
         self.setup_about_tab()
 
         # Нижняя панель
         self.create_footer()
+
+    def setup_uwp_tab(self):
+        """Настройка вкладки управления UWP-приложениями"""
+        # Основной контейнер
+        main_frame = ctk.CTkFrame(self.uwp_tab)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Верхняя панель с информацией
+        info_frame = ctk.CTkFrame(main_frame)
+        info_frame.pack(fill="x", padx=10, pady=(10, 5))
+
+        # Заголовок
+        title_label = ctk.CTkLabel(
+            info_frame,
+            text="Управление UWP-приложениями (Modern UI)",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        title_label.pack(side="left", padx=10)
+
+        # Кнопка обновления
+        self.refresh_uwp_btn = ctk.CTkButton(
+            info_frame,
+            text="Обновить список",
+            command=self.load_uwp_apps,
+            width=120,
+            height=30
+        )
+        self.refresh_uwp_btn.pack(side="right", padx=10)
+
+        # Статистика
+        stats_frame = ctk.CTkFrame(main_frame)
+        stats_frame.pack(fill="x", padx=10, pady=5)
+
+        self.uwp_stats_label = ctk.CTkLabel(
+            stats_frame,
+            text="Загрузка статистики...",
+            font=ctk.CTkFont(size=12)
+        )
+        self.uwp_stats_label.pack(pady=5)
+
+        # Панель поиска
+        search_frame = ctk.CTkFrame(main_frame)
+        search_frame.pack(fill="x", padx=10, pady=5)
+
+        ctk.CTkLabel(search_frame, text="Поиск:", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
+        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Введите название приложения...", width=300)
+        self.search_entry.pack(side="left", padx=5)
+        self.search_entry.bind('<KeyRelease>', lambda e: self.filter_uwp_apps())
+
+        # Фильтры
+        filter_frame = ctk.CTkFrame(main_frame)
+        filter_frame.pack(fill="x", padx=10, pady=5)
+
+        ctk.CTkLabel(filter_frame, text="Фильтр:", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
+
+        self.filter_var = tk.StringVar(value="all")
+        filters = [
+            ("Все", "all"),
+            ("Пользовательские", "user"),
+            ("Системные", "system"),
+            ("Только выбранные", "selected")
+        ]
+
+        for text, value in filters:
+            rb = ctk.CTkRadioButton(
+                filter_frame,
+                text=text,
+                variable=self.filter_var,
+                value=value,
+                command=self.filter_uwp_apps
+            )
+            rb.pack(side="left", padx=10)
+
+        # Панель с кнопками массовых операций
+        bulk_frame = ctk.CTkFrame(main_frame)
+        bulk_frame.pack(fill="x", padx=10, pady=5)
+
+        self.select_all_uwp_btn = ctk.CTkButton(
+            bulk_frame,
+            text="Выбрать все",
+            command=self.select_all_uwp,
+            width=120,
+            height=30
+        )
+        self.select_all_uwp_btn.pack(side="left", padx=5)
+
+        self.deselect_all_uwp_btn = ctk.CTkButton(
+            bulk_frame,
+            text="Снять все",
+            command=self.deselect_all_uwp,
+            width=120,
+            height=30
+        )
+        self.deselect_all_uwp_btn.pack(side="left", padx=5)
+
+        self.remove_selected_uwp_btn = ctk.CTkButton(
+            bulk_frame,
+            text="Удалить выбранные",
+            command=self.remove_selected_uwp,
+            width=150,
+            height=30,
+            fg_color="red",
+            hover_color="darkred"
+        )
+        self.remove_selected_uwp_btn.pack(side="left", padx=5)
+
+        # Контейнер со скроллом для списка приложений
+        self.uwp_container = ctk.CTkScrollableFrame(main_frame)
+        self.uwp_container.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Статус
+        self.uwp_status_label = ctk.CTkLabel(
+            main_frame,
+            text="",
+            font=ctk.CTkFont(size=12)
+        )
+        self.uwp_status_label.pack(pady=5)
+
+        # Загружаем приложения
+        self.uwp_apps = []
+        self.uwp_vars = {}
+        self.load_uwp_apps()
+
+    def format_size(self, size_bytes):
+        """Форматировать размер в человекочитаемый вид"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.1f} TB"
+
+    def load_uwp_apps(self):
+        """Загрузить список UWP-приложений"""
+        # Очищаем контейнер
+        for widget in self.uwp_container.winfo_children():
+            widget.destroy()
+
+        self.uwp_status_label.configure(text="Загрузка списка приложений...", text_color="orange")
+        self.window.update()
+
+        # Загружаем в отдельном потоке
+        def load_thread():
+            try:
+                apps = WindowsTweaker.get_uwp_apps()
+                stats = WindowsTweaker.get_uwp_apps_statistics()
+
+                self.window.after(0, lambda: self.display_uwp_apps(apps, stats))
+            except Exception as e:
+                self.window.after(0, lambda: self.uwp_status_label.configure(
+                    text=f"Ошибка загрузки: {str(e)}", text_color="red"
+                ))
+
+        threading.Thread(target=load_thread, daemon=True).start()
+
+    def display_uwp_apps(self, apps, stats):
+        """Отобразить UWP-приложения"""
+        self.uwp_apps = apps
+        self.uwp_vars.clear()
+
+        # Обновляем статистику
+        stats_text = (f"📊 Всего: {stats['total']} | "
+                      f"🔒 Системные: {stats['protected']} | "
+                      f"👤 Пользовательские: {stats['user']} | "
+                      f"💾 Общий размер: {self.format_size(stats['total_size'])}")
+        self.uwp_stats_label.configure(text=stats_text)
+
+        if not apps:
+            empty_label = ctk.CTkLabel(
+                self.uwp_container,
+                text="UWP-приложения не найдены",
+                font=ctk.CTkFont(size=14),
+                text_color="gray"
+            )
+            empty_label.pack(pady=50)
+            self.uwp_status_label.configure(text="Приложения не найдены")
+            return
+
+        # Отображаем приложения
+        for app in apps:
+            app_frame = ctk.CTkFrame(self.uwp_container)
+            app_frame.pack(fill="x", padx=5, pady=3)
+
+            # Чекбокс (отключаем для системных приложений)
+            var = tk.BooleanVar(value=False)
+            if not app['is_protected']:
+                self.uwp_vars[app['package_name']] = {'var': var, 'app': app}
+
+            checkbox = ctk.CTkCheckBox(
+                app_frame,
+                text="",
+                variable=var,
+                state="normal" if not app['is_protected'] else "disabled"
+            )
+            checkbox.pack(side="left", padx=5)
+
+            # Иконка приложения
+            icon_label = ctk.CTkLabel(
+                app_frame,
+                text="📦" if app['is_protected'] else "🔄",
+                font=ctk.CTkFont(size=16)
+            )
+            icon_label.pack(side="left", padx=5)
+
+            # Информация о приложении
+            info_frame = ctk.CTkFrame(app_frame, fg_color="transparent")
+            info_frame.pack(side="left", fill="x", expand=True, padx=5)
+
+            # Название и версия
+            name_label = ctk.CTkLabel(
+                info_frame,
+                text=app['name'],
+                font=ctk.CTkFont(size=13, weight="bold"),
+                anchor="w"
+            )
+            name_label.pack(anchor="w")
+
+            # Дополнительная информация
+            details_text = f"Версия: {app['version']}"
+            if app['size'] > 0:
+                details_text += f" | Размер: {self.format_size(app['size'])}"
+            if app['category'] == "Системные":
+                details_text += " | ⚠️ Системное приложение (не рекомендуется к удалению)"
+
+            details_label = ctk.CTkLabel(
+                info_frame,
+                text=details_text,
+                font=ctk.CTkFont(size=10),
+                text_color="gray",
+                anchor="w"
+            )
+            details_label.pack(anchor="w")
+
+            # Кнопки действий (только для пользовательских приложений)
+            if not app['is_protected']:
+                actions_frame = ctk.CTkFrame(app_frame, fg_color="transparent")
+                actions_frame.pack(side="right", padx=5)
+
+                remove_btn = ctk.CTkButton(
+                    actions_frame,
+                    text="Удалить",
+                    width=80,
+                    height=25,
+                    fg_color="red",
+                    hover_color="darkred",
+                    command=lambda p=app['package_name']: self.remove_single_uwp(p)
+                )
+                remove_btn.pack(side="left", padx=2)
+
+                reinstall_btn = ctk.CTkButton(
+                    actions_frame,
+                    text="Переустановить",
+                    width=100,
+                    height=25,
+                    fg_color="orange",
+                    hover_color="darkorange",
+                    command=lambda p=app['package_name']: self.reinstall_single_uwp(p)
+                )
+                reinstall_btn.pack(side="left", padx=2)
+
+        self.uwp_status_label.configure(
+            text=f"Найдено приложений: {len(apps)}",
+            text_color="green"
+        )
+
+    def filter_uwp_apps(self):
+        """Фильтрация UWP-приложений"""
+        search_text = self.search_entry.get().lower()
+        filter_type = self.filter_var.get()
+
+        # Очищаем контейнер
+        for widget in self.uwp_container.winfo_children():
+            widget.destroy()
+
+        filtered_apps = []
+        for app in self.uwp_apps:
+            # Фильтр по типу
+            if filter_type == "user" and app['is_protected']:
+                continue
+            elif filter_type == "system" and not app['is_protected']:
+                continue
+            elif filter_type == "selected":
+                if app['package_name'] not in self.uwp_vars:
+                    continue
+                if not self.uwp_vars[app['package_name']]['var'].get():
+                    continue
+
+            # Поиск по названию
+            if search_text and search_text not in app['name'].lower():
+                continue
+
+            filtered_apps.append(app)
+
+        # Отображаем отфильтрованные приложения
+        for app in filtered_apps:
+            app_frame = ctk.CTkFrame(self.uwp_container)
+            app_frame.pack(fill="x", padx=5, pady=3)
+
+            var = self.uwp_vars.get(app['package_name'], {}).get('var') if not app['is_protected'] else None
+
+            checkbox = ctk.CTkCheckBox(
+                app_frame,
+                text="",
+                variable=var,
+                state="normal" if not app['is_protected'] else "disabled"
+            )
+            checkbox.pack(side="left", padx=5)
+
+            icon_label = ctk.CTkLabel(
+                app_frame,
+                text="📦" if app['is_protected'] else "🔄",
+                font=ctk.CTkFont(size=16)
+            )
+            icon_label.pack(side="left", padx=5)
+
+            info_frame = ctk.CTkFrame(app_frame, fg_color="transparent")
+            info_frame.pack(side="left", fill="x", expand=True, padx=5)
+
+            name_label = ctk.CTkLabel(
+                info_frame,
+                text=app['name'],
+                font=ctk.CTkFont(size=13, weight="bold"),
+                anchor="w"
+            )
+            name_label.pack(anchor="w")
+
+            details_text = f"Версия: {app['version']}"
+            if app['size'] > 0:
+                details_text += f" | Размер: {self.format_size(app['size'])}"
+            if app['category'] == "Системные":
+                details_text += " | ⚠️ Системное приложение"
+
+            details_label = ctk.CTkLabel(
+                info_frame,
+                text=details_text,
+                font=ctk.CTkFont(size=10),
+                text_color="gray",
+                anchor="w"
+            )
+            details_label.pack(anchor="w")
+
+            if not app['is_protected']:
+                actions_frame = ctk.CTkFrame(app_frame, fg_color="transparent")
+                actions_frame.pack(side="right", padx=5)
+
+                remove_btn = ctk.CTkButton(
+                    actions_frame,
+                    text="Удалить",
+                    width=80,
+                    height=25,
+                    fg_color="red",
+                    hover_color="darkred",
+                    command=lambda p=app['package_name']: self.remove_single_uwp(p)
+                )
+                remove_btn.pack(side="left", padx=2)
+
+                reinstall_btn = ctk.CTkButton(
+                    actions_frame,
+                    text="Переустановить",
+                    width=100,
+                    height=25,
+                    fg_color="orange",
+                    hover_color="darkorange",
+                    command=lambda p=app['package_name']: self.reinstall_single_uwp(p)
+                )
+                reinstall_btn.pack(side="left", padx=2)
+
+        self.uwp_status_label.configure(
+            text=f"Показано приложений: {len(filtered_apps)} из {len(self.uwp_apps)}",
+            text_color="green"
+        )
+
+    def select_all_uwp(self):
+        """Выбрать все пользовательские UWP-приложения"""
+        for package_name, data in self.uwp_vars.items():
+            if not data['app']['is_protected']:
+                data['var'].set(True)
+        self.uwp_status_label.configure(text="Выбраны все пользовательские приложения", text_color="blue")
+
+    def deselect_all_uwp(self):
+        """Снять выделение со всех UWP-приложений"""
+        for data in self.uwp_vars.values():
+            data['var'].set(False)
+        self.uwp_status_label.configure(text="Выделение снято", text_color="blue")
+
+    def remove_single_uwp(self, package_name):
+        """Удалить одно UWP-приложение"""
+        if messagebox.askyesno("Подтверждение",
+                               f"Вы действительно хотите удалить это приложение?\n\n"
+                               f"Package: {package_name}\n\n"
+                               "Внимание! Это действие нельзя отменить."):
+            self.uwp_status_label.configure(text=f"Удаление {package_name}...", text_color="orange")
+            self.window.update()
+
+            def remove_thread():
+                success, message = WindowsTweaker.remove_uwp_app(package_name)
+                self.window.after(0, lambda: self.handle_remove_result(success, message, package_name))
+
+            threading.Thread(target=remove_thread, daemon=True).start()
+
+    def reinstall_single_uwp(self, package_name):
+        """Переустановить UWP-приложение"""
+        if messagebox.askyesno("Подтверждение",
+                               f"Переустановить приложение?\n\nPackage: {package_name}"):
+            self.uwp_status_label.configure(text=f"Переустановка {package_name}...", text_color="orange")
+            self.window.update()
+
+            def reinstall_thread():
+                success, message = WindowsTweaker.reinstall_uwp_app(package_name)
+                self.window.after(0, lambda: self.handle_reinstall_result(success, message, package_name))
+
+            threading.Thread(target=reinstall_thread, daemon=True).start()
+
+    def remove_selected_uwp(self):
+        """Удалить выбранные UWP-приложения"""
+        selected = [data['app'] for data in self.uwp_vars.values()
+                    if data['var'].get() and not data['app']['is_protected']]
+
+        if not selected:
+            messagebox.showwarning("Нет выбранных", "Не выбрано ни одного приложения для удаления")
+            return
+
+        apps_list = "\n".join([f"• {app['name']}" for app in selected])
+
+        if messagebox.askyesno("Подтверждение",
+                               f"Вы действительно хотите удалить {len(selected)} приложение(й)?\n\n"
+                               f"{apps_list}\n\n"
+                               "Внимание! Это действие нельзя отменить."):
+
+            self.uwp_status_label.configure(text=f"Удаление {len(selected)} приложений...", text_color="orange")
+            self.window.update()
+
+            def remove_selected_thread():
+                success_count = 0
+                errors = []
+
+                for app in selected:
+                    success, message = WindowsTweaker.remove_uwp_app(app['package_name'])
+                    if success:
+                        success_count += 1
+                    else:
+                        errors.append(f"{app['name']}: {message}")
+
+                self.window.after(0, lambda: self.handle_bulk_remove_result(success_count, len(selected), errors))
+
+            threading.Thread(target=remove_selected_thread, daemon=True).start()
+
+    def handle_remove_result(self, success, message, package_name):
+        """Обработать результат удаления"""
+        if success:
+            self.uwp_status_label.configure(text=f"Приложение {package_name} удалено", text_color="green")
+            messagebox.showinfo("Успех", f"Приложение успешно удалено!\n\n{message}")
+            self.load_uwp_apps()  # Обновляем список
+        else:
+            self.uwp_status_label.configure(text=f"Ошибка удаления {package_name}", text_color="red")
+            messagebox.showerror("Ошибка", f"Не удалось удалить приложение:\n\n{message}")
+
+    def handle_reinstall_result(self, success, message, package_name):
+        """Обработать результат переустановки"""
+        if success:
+            self.uwp_status_label.configure(text=f"Приложение {package_name} переустановлено", text_color="green")
+            messagebox.showinfo("Успех", f"Приложение успешно переустановлено!\n\n{message}")
+            self.load_uwp_apps()  # Обновляем список
+        else:
+            self.uwp_status_label.configure(text=f"Ошибка переустановки {package_name}", text_color="red")
+            messagebox.showerror("Ошибка", f"Не удалось переустановить приложение:\n\n{message}")
+
+    def handle_bulk_remove_result(self, success_count, total, errors):
+        """Обработать результат массового удаления"""
+        if success_count > 0:
+            self.uwp_status_label.configure(text=f"Удалено {success_count} из {total} приложений", text_color="green")
+
+            if errors:
+                error_msg = f"Удалено: {success_count}/{total}\n\nОшибки:\n" + "\n".join(errors[:5])
+                if len(errors) > 5:
+                    error_msg += f"\n...и еще {len(errors) - 5} ошибок"
+                messagebox.showwarning("Частичный успех", error_msg)
+            else:
+                messagebox.showinfo("Успех", f"Все {total} приложений успешно удалены!")
+
+            self.load_uwp_apps()
+        else:
+            self.uwp_status_label.configure(text="Не удалось удалить приложения", text_color="red")
+            messagebox.showerror("Ошибка", "Не удалось удалить выбранные приложения")
 
     def setup_monitor_tab(self):
         """Настройка вкладки мониторинга"""
