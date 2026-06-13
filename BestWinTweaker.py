@@ -1,21 +1,25 @@
 import psutil
 import platform
 import datetime
-import customtkinter as ctk
 import threading
 import time
-import tkinter as tk
-from tkinter import messagebox
-import shutil
-import winreg
 from PIL import Image
 import cpuinfo
-import multiprocessing
 import json
 import re
+import tkinter as tk
+from tkinter import messagebox
+import customtkinter as ctk
 
 from utilities import *
 from uwpremover import *
+from TweakerTools import *
+
+# Настройка внешнего вида customtkinter
+ctk.set_appearance_mode("light")
+ctk.set_default_color_theme("blue")
+
+VERSION = "1.9"
 
 # Для скрытого опроса видеокарты
 import subprocess
@@ -45,319 +49,15 @@ subprocess.Popen = _silent_popen
 # Импортируем GPUtil после патча
 import GPUtil
 
-# Настройка внешнего вида customtkinter
-ctk.set_appearance_mode("light")
-ctk.set_default_color_theme("blue")
 
-VERSION = "1.9 beta"
-
-
-class WindowsTweaker:
-    """Класс с инструментами оптимизации Windows"""
-
-    @staticmethod
-    def run_cmd(cmd):
-        """Выполнить командную строку и вернуть результат"""
-        try:
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                check=True,
-                encoding='cp866'
-            )
-            return result.stdout
-        except subprocess.CalledProcessError as e:
-            return f"!Ошибка: {e}"
-
-    @staticmethod
-    def clear_temp():
-        """Очистить временные файлы Windows"""
-        try:
-            temp_dirs = [
-                os.environ.get('TEMP'),
-                os.environ.get('TMP'),
-                r"C:\Windows\Temp",
-                r"C:\Windows\SoftwareDistribution\Download",
-                r"C:\Windows\Prefetch"
-            ]
-
-            deleted = 0
-            for temp_dir in temp_dirs:
-                if temp_dir and os.path.exists(temp_dir):
-                    for item in os.listdir(temp_dir):
-                        item_path = os.path.join(temp_dir, item)
-                        try:
-                            if os.path.isfile(item_path):
-                                os.remove(item_path)
-                            elif os.path.isdir(item_path):
-                                shutil.rmtree(item_path)
-                            deleted += 1
-                        except:
-                            pass
-
-            return deleted, None
-        except Exception as e:
-            return 0, str(e)
-
-    @staticmethod
-    def disable_telemetry_services():
-        """Отключить службы телеметрии"""
-        services = [
-            "DiagTrack",
-            "dmwappushservice"
-        ]
-
-        disabled = 0
-        errors = []
-        for service in services:
-            cmd = f'sc config "{service}" start= disabled'
-            result = WindowsTweaker.run_cmd(cmd)
-            if "успешно" in result.lower() or "success" in result.lower():
-                disabled += 1
-            else:
-                errors.append(service)
-
-        return disabled, errors
-
-    @staticmethod
-    def flush_dns():
-        """Очистить DNS-кэш"""
-        cmd = "ipconfig /flushdns"
-        result = WindowsTweaker.run_cmd(cmd)
-        if "успешно" in result.lower() or "successful" in result.lower():
-            return True, None
-        else:
-            return False, result
-
-    @staticmethod
-    def fix_updates():
-        """Исправить ошибки обновлений Windows"""
-        try:
-            # Останавливаем службы
-            stop_cmds = ["net stop wuauserv", "net stop cryptSvc", "net stop bits", "net stop msiserver"]
-            for cmd in stop_cmds:
-                WindowsTweaker.run_cmd(cmd)
-
-            # Очищаем временные файлы обновлений
-            WindowsTweaker.clear_temp()
-
-            # Запускаем службы
-            start_cmds = ["net start wuauserv", "net start cryptSvc", "net start bits", "net start msiserver"]
-            for cmd in start_cmds:
-                WindowsTweaker.run_cmd(cmd)
-
-            # Запускаем поиск обновлений
-            WindowsTweaker.run_cmd("wuauclt /detectnow")
-            WindowsTweaker.run_cmd("UsoClient ScanInstallWait")
-
-            return True, None
-        except Exception as e:
-            return False, str(e)
-
-    @staticmethod
-    def is_indexing_enabled():
-        """Проверить включена ли индексация"""
-        try:
-            cmd = 'sc query "wsearch"'
-            result = WindowsTweaker.run_cmd(cmd)
-            return '4  RUNNING' in result
-        except:
-            return False
-
-    @staticmethod
-    def disable_indexing():
-        """Отключить индексацию"""
-        cmd = 'sc config "wsearch" start= disabled'
-        WindowsTweaker.run_cmd(cmd)
-
-    @staticmethod
-    def enable_indexing():
-        """Включить индексацию"""
-        cmd = 'sc config "wsearch" start= delayed-auto && sc start "wsearch"'
-        WindowsTweaker.run_cmd(cmd)
-
-    @staticmethod
-    def get_disabled_folder_path(startup_path):
-        """Получить путь к папке с отключенными программами"""
-        return os.path.join(os.path.dirname(startup_path), "Disabled_Startup")
-
-    @staticmethod
-    def get_startup_folder_programs():
-        """Получить программы из папки Startup"""
-        startup_programs = []
-
-        startup_paths = [
-            os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'),
-            os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'), 'Microsoft', 'Windows', 'Start Menu',
-                         'Programs', 'Startup'),
-            os.path.join(os.environ.get('USERPROFILE', ''), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu',
-                         'Programs', 'Startup')
-        ]
-
-        startup_paths = list(dict.fromkeys(startup_paths))
-
-        for startup_path in startup_paths:
-            if os.path.exists(startup_path):
-                try:
-                    for item in os.listdir(startup_path):
-                        item_path = os.path.join(startup_path, item)
-                        if os.path.isfile(item_path) and item.lower().endswith(
-                                ('.lnk', '.exe', '.bat', '.cmd', '.vbs', '.ps1')):
-                            disabled_folder = WindowsTweaker.get_disabled_folder_path(startup_path)
-                            disabled_path = os.path.join(disabled_folder, item)
-
-                            startup_programs.append({
-                                "type": "folder",
-                                "display_name": os.path.splitext(item)[0],
-                                "filename": item,
-                                "full_path": item_path,
-                                "startup_path": startup_path,
-                                "disabled_path": disabled_path,
-                                "is_disabled": False
-                            })
-                except Exception:
-                    pass
-
-        for startup_path in startup_paths:
-            disabled_folder = WindowsTweaker.get_disabled_folder_path(startup_path)
-            if os.path.exists(disabled_folder):
-                try:
-                    for item in os.listdir(disabled_folder):
-                        item_path = os.path.join(disabled_folder, item)
-                        if os.path.isfile(item_path) and item.lower().endswith(
-                                ('.lnk', '.exe', '.bat', '.cmd', '.vbs', '.ps1')):
-                            existing = any(
-                                p["filename"] == item and p["startup_path"] == startup_path for p in startup_programs)
-                            if not existing:
-                                startup_programs.append({
-                                    "type": "folder",
-                                    "display_name": os.path.splitext(item)[0],
-                                    "filename": item,
-                                    "full_path": os.path.join(startup_path, item),
-                                    "startup_path": startup_path,
-                                    "disabled_path": item_path,
-                                    "is_disabled": True
-                                })
-                except Exception:
-                    pass
-
-        return startup_programs
-
-    @staticmethod
-    def get_startup_registry_programs():
-        """Получить программы из реестра"""
-        startup_programs = []
-
-        registry_paths = [
-            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"),
-            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"),
-            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"),
-            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run")
-        ]
-
-        for hive, reg_path in registry_paths:
-            try:
-                key = winreg.OpenKey(hive, reg_path, 0, winreg.KEY_READ)
-                i = 0
-                while True:
-                    try:
-                        name, value, _ = winreg.EnumValue(key, i)
-                        is_disabled = name.startswith("Disabled_")
-                        original_name = name[9:] if is_disabled else name
-
-                        startup_programs.append({
-                            "type": "registry",
-                            "display_name": original_name,
-                            "original_name": name,
-                            "path": value,
-                            "reg_hive": hive,
-                            "reg_path": reg_path,
-                            "is_disabled": is_disabled
-                        })
-                        i += 1
-                    except WindowsError:
-                        break
-                winreg.CloseKey(key)
-            except WindowsError:
-                pass
-
-        return startup_programs
-
-    @staticmethod
-    def get_all_startup_programs():
-        """Получить все программы из автозагрузки"""
-        all_programs = WindowsTweaker.get_startup_registry_programs()
-        all_programs.extend(WindowsTweaker.get_startup_folder_programs())
-        return all_programs
-
-    @staticmethod
-    def disable_registry_program(program):
-        """Отключить программу из реестра"""
-        try:
-            key = winreg.OpenKey(program["reg_hive"], program["reg_path"], 0, winreg.KEY_SET_VALUE)
-            if not program["original_name"].startswith("Disabled_"):
-                winreg.SetValueEx(key, f"Disabled_{program['original_name']}", 0, winreg.REG_SZ, program["path"])
-                winreg.DeleteValue(key, program["original_name"])
-            winreg.CloseKey(key)
-            return True
-        except:
-            return False
-
-    @staticmethod
-    def enable_registry_program(program):
-        """Включить программу в реестре"""
-        try:
-            key = winreg.OpenKey(program["reg_hive"], program["reg_path"], 0, winreg.KEY_SET_VALUE)
-            if program["original_name"].startswith("Disabled_"):
-                original_name = program["original_name"][9:]
-                winreg.SetValueEx(key, original_name, 0, winreg.REG_SZ, program["path"])
-                winreg.DeleteValue(key, program["original_name"])
-            winreg.CloseKey(key)
-            return True
-        except:
-            return False
-
-    @staticmethod
-    def disable_folder_program(program):
-        """Отключить программу из папки Startup"""
-        try:
-            disabled_folder = WindowsTweaker.get_disabled_folder_path(program["startup_path"])
-            if not os.path.exists(disabled_folder):
-                os.makedirs(disabled_folder)
-            if os.path.exists(program["full_path"]):
-                shutil.move(program["full_path"], program["disabled_path"])
-                return True
-            return False
-        except:
-            return False
-
-    @staticmethod
-    def enable_folder_program(program):
-        """Включить программу в папку Startup"""
-        try:
-            if os.path.exists(program["disabled_path"]):
-                if not os.path.exists(program["startup_path"]):
-                    os.makedirs(program["startup_path"])
-                shutil.move(program["disabled_path"], program["full_path"])
-                return True
-            return False
-        except:
-            return False
-
+class BestWinTweaker:
+    """Класс графического интерфейса"""
     
-
-
-class ModernSystemMonitor:
     def __init__(self):
         self.window = ctk.CTk()
         self.window.title("BestWinTweaker - Системный монитор и оптимизатор")
         self.window.geometry("1400x750")
-        try:
-            self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
-        except:
-            pass
+        self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
 
         # Переменные для обновления
         self.running = True
@@ -400,6 +100,9 @@ class ModernSystemMonitor:
 
         # Нижняя панель
         self.create_footer()
+        self.load_autostart_programs()
+        self.load_uwp_apps()
+        
 
     def setup_uwp_tab(self):
         """Настройка вкладки управления UWP-приложениями"""
@@ -440,12 +143,12 @@ class ModernSystemMonitor:
         self.uwp_vars = {}
 
     def load_uwp_apps(self):
-        """Загрузка UWP-приложений (исправленная версия)"""
+        """Загрузка UWP-приложений"""
         # Очищаем контейнер в главном потоке
         for widget in self.uwp_container.winfo_children():
             widget.destroy()
         
-        self.optimize_status_label.configure(text="Загрузка списка приложений...", text_color="orange")
+        self.status_label.configure(text="Загрузка списка приложений...", text_color="orange")
         self.refresh_uwp_btn.configure(state="disabled")
         
         def load_in_thread():
@@ -459,14 +162,14 @@ class ModernSystemMonitor:
                 
             except Exception as e:
                 error_msg = f"Ошибка: {str(e)}"
-                self.window.after(0, lambda: self.optimize_status_label.configure(text=error_msg, text_color="red"))
+                self.window.after(0, lambda: self.status_label.configure(text=error_msg, text_color="red"))
                 self.window.after(0, lambda: self.refresh_uwp_btn.configure(state="normal"))
         
         # Запускаем в потоке
         threading.Thread(target=load_in_thread, daemon=True).start()
 
     def display_uwp_apps_fixed(self):
-        """Отображение UWP-приложений (исправленная версия)"""
+        """Отображение UWP-приложений"""
         # Очищаем контейнер
         for widget in self.uwp_container.winfo_children():
             widget.destroy()
@@ -481,14 +184,14 @@ class ModernSystemMonitor:
                 text_color="gray"
             )
             empty_label.pack(pady=50)
-            self.optimize_status_label.configure(text="Приложения не найдены")
+            self.status_label.configure(text="Приложения не найдены")
             self.refresh_uwp_btn.configure(state="normal")
             return
         
         # Статистика
         safe_count = sum(1 for app in self.uwp_apps if app['is_safe'])
         stats_text = f"Найдено: {len(self.uwp_apps)} | Можно удалить: {safe_count}"
-        self.optimize_status_label.configure(text=stats_text, text_color="green")
+        self.status_label.configure(text=stats_text, text_color="green")
         
         # Отображаем каждое приложение
         for app in self.uwp_apps:
@@ -556,7 +259,7 @@ class ModernSystemMonitor:
         if not messagebox.askyesno("Подтверждение", f"Удалить '{app_name}'?\n\nЭто действие нельзя отменить."):
             return
         
-        self.optimize_status_label.configure(text=f"Удаление {app_name}...", text_color="orange")
+        self.status_label.configure(text=f"Удаление {app_name}...", text_color="orange")
         self.refresh_uwp_btn.configure(state="disabled")
         
         def remove_thread():
@@ -564,11 +267,11 @@ class ModernSystemMonitor:
             
             def update_ui():
                 if success:
-                    self.optimize_status_label.configure(text=f"✓ {app_name} удалено", text_color="green")
+                    self.status_label.configure(text=f"✓ {app_name} удалено", text_color="green")
                     # Обновляем список
                     self.load_uwp_apps()
                 else:
-                    self.optimize_status_label.configure(text=f"✗ Ошибка при удалении {app_name}", text_color="red")
+                    self.status_label.configure(text=f"✗ Ошибка при удалении {app_name}", text_color="red")
                     self.refresh_uwp_btn.configure(state="normal")
             
             self.window.after(0, update_ui)
@@ -768,13 +471,13 @@ class ModernSystemMonitor:
         self.deselect_all_btn.pack(side="left", padx=5)
 
         # Статус
-        self.autostart_status_label = ctk.CTkLabel(
+        self.status_label = ctk.CTkLabel(
             self.autostart_tab,
             text="Загрузка списка программ...",
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
-        self.autostart_status_label.pack(pady=(0, 10))
+        self.status_label.pack(pady=(0, 10))
 
         # Загружаем программы
         self.autostart_programs = []
@@ -787,7 +490,7 @@ class ModernSystemMonitor:
         for widget in self.autostart_container.winfo_children():
             widget.destroy()
 
-        self.autostart_programs = WindowsTweaker.get_all_startup_programs()
+        self.autostart_programs = TweakerTools.get_all_startup_programs()
         self.autostart_vars.clear()
 
         if not self.autostart_programs:
@@ -798,7 +501,7 @@ class ModernSystemMonitor:
                 text_color="gray"
             )
             empty_label.pack(pady=50)
-            self.autostart_status_label.configure(text="Программы не найдены")
+            self.status_label.configure(text="Программы не найдены")
             return
 
         # Сортируем программы по имени
@@ -860,7 +563,7 @@ class ModernSystemMonitor:
                 )
                 path_label.pack(side="right", padx=10)
 
-        self.autostart_status_label.configure(
+        self.status_label.configure(
             text=f"Найдено программ: {len(self.autostart_programs)}"
         )
 
@@ -893,21 +596,21 @@ class ModernSystemMonitor:
             if current_state != actual_state:
                 if program["type"] == "registry":
                     if current_state:
-                        success = WindowsTweaker.enable_registry_program(program)
+                        success = TweakerTools.enable_registry_program(program)
                     else:
-                        success = WindowsTweaker.disable_registry_program(program)
+                        success = TweakerTools.disable_registry_program(program)
                 else:
                     if current_state:
-                        success = WindowsTweaker.enable_folder_program(program)
+                        success = TweakerTools.enable_folder_program(program)
                     else:
-                        success = WindowsTweaker.disable_folder_program(program)
+                        success = TweakerTools.disable_folder_program(program)
 
                 if success:
                     changes_count += 1
                     program["is_disabled"] = not current_state
 
         if changes_count > 0:
-            self.autostart_status_label.configure(
+            self.status_label.configure(
                 text=f"Изменено программ: {changes_count}. Для полного эффекта перезагрузите компьютер.",
                 text_color="green"
             )
@@ -916,89 +619,89 @@ class ModernSystemMonitor:
                                 "Для полного эффекта рекомендуется перезагрузить компьютер.")
             self.load_autostart_programs()
         else:
-            self.autostart_status_label.configure(text="Изменений не было")
+            self.status_label.configure(text="Изменений не было")
             messagebox.showinfo("Информация", "Изменений не было")
 
     def update_indexing_button_text(self):
         """Обновить текст кнопки индексации"""
-        if WindowsTweaker.is_indexing_enabled():
+        if TweakerTools.is_indexing_enabled():
             self.indexing_btn_text.set("Отключить индексацию дисков")
         else:
             self.indexing_btn_text.set("Включить индексацию дисков")
 
     def action_clear_temp(self):
         """Очистка временных файлов"""
-        self.optimize_status_label.configure(text="Очистка временных файлов...", text_color="orange")
+        self.status_label.configure(text="Очистка временных файлов...", text_color="orange")
         self.window.update()
 
-        deleted, error = WindowsTweaker.clear_temp()
+        deleted, error = TweakerTools.clear_temp()
 
         if error:
-            self.optimize_status_label.configure(text=f"Ошибка: {error}", text_color="red")
+            self.status_label.configure(text=f"Ошибка: {error}", text_color="red")
             messagebox.showerror("Ошибка", f"Не удалось очистить временные файлы:\n{error}")
         else:
-            self.optimize_status_label.configure(text=f"Очищено {deleted} файлов", text_color="green")
+            self.status_label.configure(text=f"Очищено {deleted} файлов", text_color="green")
             messagebox.showinfo("Успех", f"Очищено {deleted} временных файлов")
 
     def action_disable_telemetry(self):
         """Отключение телеметрии"""
-        self.optimize_status_label.configure(text="Отключение служб телеметрии...", text_color="orange")
+        self.status_label.configure(text="Отключение служб телеметрии...", text_color="orange")
         self.window.update()
 
-        disabled, errors = WindowsTweaker.disable_telemetry_services()
+        disabled, errors = TweakerTools.disable_telemetry_services()
 
         if errors:
-            self.optimize_status_label.configure(text=f"Отключено {disabled} из {disabled + len(errors)} служб",
+            self.status_label.configure(text=f"Отключено {disabled} из {disabled + len(errors)} служб",
                                                  text_color="orange")
             messagebox.showwarning("Предупреждение",
                                    f"Отключено {disabled} служб.\nНе удалось отключить: {', '.join(errors)}")
         else:
-            self.optimize_status_label.configure(text=f"Отключено {disabled} служб телеметрии", text_color="green")
+            self.status_label.configure(text=f"Отключено {disabled} служб телеметрии", text_color="green")
             messagebox.showinfo("Успех", f"Успешно отключено {disabled} служб телеметрии")
 
     def action_flush_dns(self):
         """Очистка DNS"""
-        self.optimize_status_label.configure(text="Очистка DNS кэша...", text_color="orange")
+        self.status_label.configure(text="Очистка DNS кэша...", text_color="orange")
         self.window.update()
 
-        success, error = WindowsTweaker.flush_dns()
+        success, error = TweakerTools.flush_dns()
 
         if success:
-            self.optimize_status_label.configure(text="DNS кэш очищен", text_color="green")
+            self.status_label.configure(text="DNS кэш очищен", text_color="green")
             messagebox.showinfo("Успех", "DNS кэш успешно очищен")
         else:
-            self.optimize_status_label.configure(text="Ошибка очистки DNS", text_color="red")
+            self.status_label.configure(text="Ошибка очистки DNS", text_color="red")
             messagebox.showerror("Ошибка", f"Не удалось очистить DNS кэш:\n{error}")
 
     def action_fix_updates(self):
         """Исправление обновлений"""
-        self.optimize_status_label.configure(text="Исправление ошибок обновлений...", text_color="orange")
+        self.status_label.configure(text="Исправление ошибок обновлений...", text_color="orange")
         self.window.update()
 
-        success, error = WindowsTweaker.fix_updates()
+        success, error = TweakerTools.fix_updates()
 
         if success:
-            self.optimize_status_label.configure(text="Обновления исправлены, запущена проверка", text_color="green")
+            self.status_label.configure(text="Обновления исправлены, запущена проверка", text_color="green")
             messagebox.showinfo("Информация",
                                 "Проверка обновлений запущена (может занять время).\n"
                                 "Проверьте Центр обновлений Windows для отслеживания статуса.")
         else:
-            self.optimize_status_label.configure(text="Ошибка при исправлении", text_color="red")
+            self.status_label.configure(text="Ошибка при исправлении", text_color="red")
             messagebox.showerror("Ошибка", f"Не удалось исправить ошибки обновлений:\n{error}")
 
     def action_toggle_indexing(self):
         """Переключение индексации"""
-        if WindowsTweaker.is_indexing_enabled():
-            self.optimize_status_label.configure(text="Отключение индексации...", text_color="orange")
+        if TweakerTools.is_indexing_enabled():
+            self.status_label.configure(text="Отключение индексации...", text_color="orange")
             self.window.update()
-            WindowsTweaker.disable_indexing()
-            self.optimize_status_label.configure(text="Индексация дисков отключена", text_color="green")
+            TweakerTools.disable_indexing()
+            self.status_label.configure(text="Индексация дисков отключена", text_color="green")
             messagebox.showinfo("Готово", "Индексация дисков отключена.\nЭто снизит нагрузку на диск.")
         else:
-            self.optimize_status_label.configure(text="Включение индексации...", text_color="orange")
+            self.status_label.configure(text="Включение индексации...", text_color="orange")
             self.window.update()
-            WindowsTweaker.enable_indexing()
-            self.optimize_status_label.configure(text="Индексация дисков включена", text_color="green")
+            TweakerTools.enable_indexing()
+            self.status_label.configure(text="Индексация дисков включена", text_color="green")
             messagebox.showinfo("Готово", "Индексация дисков включена.\nПоиск файлов будет быстрее.")
 
         self.update_indexing_button_text()
@@ -1192,13 +895,13 @@ class ModernSystemMonitor:
         self.time_label.pack(side="right", padx=20)
 
         # Статус операций
-        self.optimize_status_label = ctk.CTkLabel(
+        self.status_label = ctk.CTkLabel(
             footer,
             text="Готов",
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
-        self.optimize_status_label.pack(side="left", padx=20)
+        self.status_label.pack(side="left", padx=20)
 
     def update_stats(self):
         while self.running:
@@ -1421,10 +1124,3 @@ class ModernSystemMonitor:
         self.running = False
         self.window.quit()
         self.window.destroy()
-
-
-if __name__ == "__main__":
-    # Pyinstaller fix
-    multiprocessing.freeze_support()
-    app = ModernSystemMonitor()
-    app.run()

@@ -5,7 +5,7 @@ import os
 APP_NAME = "BestWinTweaker"
 
 # Пути
-SCRIPT_PATH = "BestWinTweaker.py"
+SCRIPT_PATH = "start_app.py"
 ICON_PATH = "./resources/images/BestWinTweaker.ico"
 
 # Создаем файл версии
@@ -88,6 +88,7 @@ args = [
 PyInstaller.__main__.run(args)
 
 print("Сборка завершена!")
+input("Нажмите Enter, чтобы выйти...")
 
 # Удаляем временный файл версии
 if os.path.exists(version_file):
