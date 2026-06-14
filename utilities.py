@@ -5,6 +5,7 @@ import tempfile
 import requests
 import sys
 import os
+import wmi
 from tkinter import messagebox
 import subprocess
 import traceback
@@ -24,6 +25,84 @@ def get_disk_type(drive_letter='C:'):
         print(f"Ошибка при определении типа диска в Windows: {e}")
     return 'Unknown'
 
+# Функция для получения информации об оперативной памяти
+def get_ddr_info():
+            """
+            Получает информацию о модулях памяти через WMI на Windows.
+            Возвращает список словарей с данными о каждом модуле.
+            """
+            c = wmi.WMI()
+            memory_modules = []
+
+            # Значения идентификации типа памяти из Win32_PhysicalMemory
+            memory_type_map = {
+                0: "Unknown",
+                1: "Other",
+                2: "DRAM",
+                3: "Synchronous DRAM",
+                4: "Cache DRAM",
+                5: "EDO",
+                6: "EDRAM",
+                7: "VRAM",
+                8: "SRAM",
+                9: "RAM",
+                10: "ROM",
+                11: "Flash",
+                12: "EEPROM",
+                13: "FEPROM",
+                14: "EPROM",
+                15: "CDRAM",
+                16: "3DRAM",
+                17: "SDRAM",
+                18: "SGRAM",
+                19: "RDRAM",
+                20: "DDR",        # DDR (DDR1)
+                21: "DDR2",
+                22: "DDR2 FB-DIMM",
+                24: "DDR3",       # DDR3
+                25: "FBD2",
+                26: "DDR4",       # DDR4
+                27: "LPDDR",
+                28: "LPDDR2",
+                29: "LPDDR3",
+                30: "LPDDR4",
+                31: "DDR5",       # DDR5 (современные системы)
+            }
+
+            for mem in c.Win32_PhysicalMemory():
+                mem_type = memory_type_map.get(mem.MemoryType, "Unknown")
+                capacity_bytes = getattr(mem, 'Capacity', 0)
+                if capacity_bytes:
+                    capacity_gb = int(capacity_bytes) / (1024 ** 3)
+                else:
+                    capacity_gb = 0
+
+                speed = getattr(mem, 'Speed', None)
+                manufacturer = getattr(mem, 'Manufacturer', 'Unknown')
+                part_number = getattr(mem, 'PartNumber', 'Unknown')
+                bank_label = getattr(mem, 'BankLabel', 'Unknown')
+                device_locator = getattr(mem, 'DeviceLocator', 'Unknown')
+
+                memory_modules.append({
+                    "type": mem_type,
+                    "capacity_gb": capacity_gb,
+                    "speed_mhz": speed if speed and speed > 0 else None,
+                    "manufacturer": manufacturer.strip() if manufacturer else "Unknown",
+                    "part_number": part_number.strip() if part_number else "Unknown",
+                    "bank": bank_label,
+                    "slot": device_locator,
+                })           
+            return memory_modules
+
+# Функция для получения типа оперативной памяти
+def get_ddr_type():
+    ddr_list = get_ddr_info()
+    ddr_type = ddr_list[0]['type']
+    if ddr_type != "Unknown":
+        return ddr_type
+    else:
+        return ddr_list[0]['part_number']
+        
 
 # Функция для корректного поиска файлов
 def resource_path(relative_path):

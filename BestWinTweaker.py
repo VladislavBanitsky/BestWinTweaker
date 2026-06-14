@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 
-from utilities import get_disk_type, resource_path, callback, get_windows_version, start_download
+from utilities import get_disk_type, get_ddr_type, resource_path, callback, get_windows_version, start_download
 from uwpremover import *
 from TweakerTools import *
 
@@ -796,8 +796,9 @@ class BestWinTweaker:
         ram_header = ctk.CTkFrame(ram_frame, height=40)
         ram_header.pack(fill="x", padx=10, pady=(10, 5))
         ram_header.pack_propagate(False)
-
-        ctk.CTkLabel(ram_header, text="RAM - Оперативная память",
+        
+        
+        ctk.CTkLabel(ram_header, text=f"RAM - Оперативная память ({get_ddr_type()})",
                      font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
 
         self.ram_progress = ctk.CTkProgressBar(ram_frame, height=20)
