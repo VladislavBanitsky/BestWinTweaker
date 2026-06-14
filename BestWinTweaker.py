@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 
-from utilities import *
+from utilities import get_disk_type, resource_path, callback, get_windows_version, start_download
 from uwpremover import *
 from TweakerTools import *
 
@@ -975,7 +975,8 @@ class BestWinTweaker:
                         'mount': partition.mountpoint,
                         'percent': usage.percent,
                         'used': usage.used,
-                        'total': usage.total
+                        'total': usage.total,
+                        'type': get_disk_type(partition.device)
                     }
                 except:
                     pass
@@ -991,7 +992,7 @@ class BestWinTweaker:
                     disk_frame = ctk.CTkFrame(self.disk_container)
                     disk_frame.pack(fill="x", pady=2)
 
-                    name_label = ctk.CTkLabel(disk_frame, text=f"{device} ({info['mount']})",
+                    name_label = ctk.CTkLabel(disk_frame, text=f"{device} ({info['type']})",
                                               font=ctk.CTkFont(size=16, weight="bold"))
                     name_label.pack(anchor="w", padx=5, pady=(2, 0))
 

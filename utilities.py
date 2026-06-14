@@ -9,6 +9,22 @@ from tkinter import messagebox
 import subprocess
 import traceback
 
+# Функция для проверки типа диска
+def get_disk_type(drive_letter='C:'):
+    """Определение типа диска в Windows"""
+    try:
+        # Получаем информацию о диске через PowerShell
+        cmd = f'powershell "Get-PhysicalDisk | Where-Object {{$_.DeviceId -eq (Get-Partition -DriveLetter {drive_letter[0]} | Get-Disk).Number}} | Select-Object MediaType"'
+        result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+        if 'SSD' in result.stdout:
+            return 'SSD'
+        elif 'HDD' in result.stdout:
+            return 'HDD'
+    except Exception as e:
+        print(f"Ошибка при определении типа диска в Windows: {e}")
+    return 'Unknown'
+
+
 # Функция для корректного поиска файлов
 def resource_path(relative_path):
     """ Получает абсолютный путь к ресурсу, работает для dev и для PyInstaller """
