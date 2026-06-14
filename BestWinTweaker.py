@@ -62,6 +62,12 @@ class BestWinTweaker:
         # Переменные для обновления
         self.running = True
         self.update_interval = 2000
+        
+        # Флаги для потоков
+        self._disk_updating = False
+        self._ram_updating = False
+        self._disk_cache = {}
+        self._ram_cache = {}
 
         self.setup_ui()
         self.start_updates()
@@ -867,6 +873,15 @@ class BestWinTweaker:
         self.disk_container.pack(fill="x", padx=20, pady=10)
 
         self.disk_widgets = {}
+        
+        # Добавляем индикатор загрузки
+        self.disk_loading_label = ctk.CTkLabel(
+            self.disk_container,
+            text="Загрузка информации о дисках...",
+            font=ctk.CTkFont(size=12),
+            text_color="gray"
+        )
+        self.disk_loading_label.pack(pady=10)
 
     def create_gpu_section(self, parent):
         gpu_frame = ctk.CTkFrame(parent)
@@ -908,86 +923,104 @@ class BestWinTweaker:
         while self.running:
             try:
                 self.window.after(0, self.update_cpu_info)
-                self.window.after(0, self.update_ram_info)
                 self.window.after(0, self.update_network_info)
-                self.window.after(0, self.update_disk_info)
                 self.window.after(0, self.update_gpu_info)
                 self.window.after(0, self.update_time_info)
+                
+                # Запускаем обновление RAM и дисков в отдельных потоках
+                self.update_ram_async()
+                self.update_disk_async()
 
                 time.sleep(self.update_interval / 1000)
             except Exception as e:
                 print(f"Error in update thread: {e}")
                 time.sleep(1)
 
-    def update_cpu_info(self):
+    def update_ram_async(self):
+        """Асинхронное обновление информации об ОЗУ"""
+        if self._ram_updating:
+            return
+        
+        self._ram_updating = True
+        
+        def _update_ram_in_thread():
+            try:
+                ram = psutil.virtual_memory()
+                self._ram_cache = {
+                    'percent': ram.percent,
+                    'used_gb': ram.used / (1024 ** 3),
+                    'total_gb': ram.total / (1024 ** 3)
+                }
+                # Обновляем UI в главном потоке
+                self.window.after(0, self._update_ram_ui)
+            except Exception as e:
+                print(f"RAM update error in thread: {e}")
+            finally:
+                self._ram_updating = False
+        
+        threading.Thread(target=_update_ram_in_thread, daemon=True).start()
+    
+    def _update_ram_ui(self):
+        """Обновление UI с информацией об ОЗУ"""
         try:
-            cpu_percent = psutil.cpu_percent(interval=0.5)
-            self.cpu_progress.set(cpu_percent / 100)
-            self.cpu_percent_label.configure(text=f"Загрузка: {cpu_percent:.1f}%")
-
-            cpu_freq = psutil.cpu_freq()
-            if cpu_freq:
-                self.cpu_freq_label.configure(text=f"Частота: {cpu_freq.current:.0f} MHz")
+            if self._ram_cache:
+                self.ram_progress.set(self._ram_cache['percent'] / 100)
+                self.ram_percent_label.configure(text=f"Использовано: {self._ram_cache['percent']:.1f}%")
+                self.ram_usage_label.configure(
+                    text=f"Использовано: {self._ram_cache['used_gb']:.1f} GB / {self._ram_cache['total_gb']:.1f} GB"
+                )
         except Exception as e:
-            print(f"CPU update error: {e}")
+            print(f"RAM UI update error: {e}")
 
-    def update_ram_info(self):
+    def update_disk_async(self):
+        """Асинхронное обновление информации о дисках"""
+        if self._disk_updating:
+            return
+        
+        self._disk_updating = True
+        
+        def _update_disk_in_thread():
+            try:
+                current_disks = {}
+                for partition in psutil.disk_partitions():
+                    try:
+                        usage = psutil.disk_usage(partition.mountpoint)
+                        current_disks[partition.device] = {
+                            'mount': partition.mountpoint,
+                            'percent': usage.percent,
+                            'used': usage.used,
+                            'total': usage.total,
+                            'type': get_disk_type(partition.device)
+                        }
+                    except:
+                        pass
+                self._disk_cache = current_disks
+                # Обновляем UI в главном потоке
+                self.window.after(0, self._update_disk_ui)
+            except Exception as e:
+                print(f"Disk update error in thread: {e}")
+            finally:
+                self._disk_updating = False
+        
+        threading.Thread(target=_update_disk_in_thread, daemon=True).start()
+    
+    def _update_disk_ui(self):
+        """Обновление UI с информацией о дисках"""
         try:
-            ram = psutil.virtual_memory()
-            self.ram_progress.set(ram.percent / 100)
-            self.ram_percent_label.configure(text=f"Использовано: {ram.percent:.1f}%")
-
-            ram_used_gb = ram.used / (1024 ** 3)
-            ram_total_gb = ram.total / (1024 ** 3)
-            self.ram_usage_label.configure(text=f"Использовано: {ram_used_gb:.1f} GB / {ram_total_gb:.1f} GB")
-        except Exception as e:
-            print(f"RAM update error: {e}")
-
-    def update_network_info(self):
-        try:
-            current_net = psutil.net_io_counters()
-            current_time = time.time()
-
-            time_diff = current_time - self.prev_time
-            if time_diff > 0:
-                download_speed = (current_net.bytes_recv - self.prev_net.bytes_recv) / time_diff / (1024 ** 2)
-                upload_speed = (current_net.bytes_sent - self.prev_net.bytes_sent) / time_diff / (1024 ** 2)
-
-                self.download_label.configure(text=f"Загрузка: {download_speed:.2f} MB/s")
-                self.upload_label.configure(text=f"Отдача: {upload_speed:.2f} MB/s")
-
-            total_download_gb = current_net.bytes_recv / (1024 ** 3)
-            total_upload_gb = current_net.bytes_sent / (1024 ** 3)
-            self.total_download_label.configure(text=f"Всего скачано: {total_download_gb:.2f} GB")
-            self.total_upload_label.configure(text=f"Всего отправлено: {total_upload_gb:.2f} GB")
-
-            self.prev_net = current_net
-            self.prev_time = current_time
-        except Exception as e:
-            print(f"Network update error: {e}")
-
-    def update_disk_info(self):
-        try:
-            current_disks = {}
-            for partition in psutil.disk_partitions():
-                try:
-                    usage = psutil.disk_usage(partition.mountpoint)
-                    current_disks[partition.device] = {
-                        'mount': partition.mountpoint,
-                        'percent': usage.percent,
-                        'used': usage.used,
-                        'total': usage.total,
-                        'type': get_disk_type(partition.device)
-                    }
-                except:
-                    pass
-
+            # Удаляем индикатор загрузки, если он есть
+            if hasattr(self, 'disk_loading_label') and self.disk_loading_label.winfo_exists():
+                self.disk_loading_label.destroy()
+            
+            current_disks = self._disk_cache
+            
+            # Удаляем виджеты для дисков, которые больше не существуют
             for device in list(self.disk_widgets.keys()):
                 if device not in current_disks:
                     for widget in self.disk_widgets[device]:
                         widget.destroy()
                     del self.disk_widgets[device]
 
+            # Создаем или обновляем виджеты для существующих дисков
             for device, info in current_disks.items():
                 if device not in self.disk_widgets:
                     disk_frame = ctk.CTkFrame(self.disk_container)
@@ -1013,7 +1046,42 @@ class BestWinTweaker:
                 progress.set(info['percent'] / 100)
                 info_label.configure(text=f"Использовано: {info['percent']:.1f}% ({used_gb:.1f}/{total_gb:.1f} GB)")
         except Exception as e:
-            print(f"Disk update error: {e}")
+            print(f"Disk UI update error: {e}")
+
+    def update_cpu_info(self):
+        try:
+            cpu_percent = psutil.cpu_percent(interval=0.5)
+            self.cpu_progress.set(cpu_percent / 100)
+            self.cpu_percent_label.configure(text=f"Загрузка: {cpu_percent:.1f}%")
+
+            cpu_freq = psutil.cpu_freq()
+            if cpu_freq:
+                self.cpu_freq_label.configure(text=f"Частота: {cpu_freq.current:.0f} MHz")
+        except Exception as e:
+            print(f"CPU update error: {e}")
+
+    def update_network_info(self):
+        try:
+            current_net = psutil.net_io_counters()
+            current_time = time.time()
+
+            time_diff = current_time - self.prev_time
+            if time_diff > 0:
+                download_speed = (current_net.bytes_recv - self.prev_net.bytes_recv) / time_diff / (1024 ** 2)
+                upload_speed = (current_net.bytes_sent - self.prev_net.bytes_sent) / time_diff / (1024 ** 2)
+
+                self.download_label.configure(text=f"Загрузка: {download_speed:.2f} MB/s")
+                self.upload_label.configure(text=f"Отдача: {upload_speed:.2f} MB/s")
+
+            total_download_gb = current_net.bytes_recv / (1024 ** 3)
+            total_upload_gb = current_net.bytes_sent / (1024 ** 3)
+            self.total_download_label.configure(text=f"Всего скачано: {total_download_gb:.2f} GB")
+            self.total_upload_label.configure(text=f"Всего отправлено: {total_upload_gb:.2f} GB")
+
+            self.prev_net = current_net
+            self.prev_time = current_time
+        except Exception as e:
+            print(f"Network update error: {e}")
 
     def update_gpu_info(self):
         """Обновление информации о GPU в отдельном потоке (без зависаний)"""
@@ -1115,7 +1183,7 @@ class BestWinTweaker:
         """Запуск всех потоков обновления"""
         self.update_thread = threading.Thread(target=self.update_stats, daemon=True)
         self.update_thread.start()
-        # Добавляем переменную для отслеживания потоков GPU
+        # Добавляем переменные для отслеживания потоков
         self._gpu_updating = False
 
     def run(self):
