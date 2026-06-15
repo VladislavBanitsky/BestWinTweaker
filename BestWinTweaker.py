@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 
-from utilities import get_disk_type, get_ddr_type, resource_path, callback, get_windows_version, start_download
+from utilities import get_disk_type, get_ddr_type, get_board_model, resource_path, callback, get_windows_version, start_download
 from uwpremover import *
 from TweakerTools import *
 
@@ -298,6 +298,7 @@ class BestWinTweaker:
         self.create_cpu_section(left_column)
         self.create_ram_section(left_column)
         self.create_gpu_section(left_column)
+        self.create_board_section(right_column)
         self.create_network_section(right_column)
         self.create_disk_section(right_column)
 
@@ -821,7 +822,20 @@ class BestWinTweaker:
         self.ram_usage_label = ctk.CTkLabel(info_frame, text="Использовано: 0 GB / 0 GB",
                                             font=ctk.CTkFont(size=16))
         self.ram_usage_label.pack(side="right", padx=10)
+    
+    def create_board_section(self, parent):
+        board_frame = ctk.CTkFrame(parent)
+        board_frame.pack(fill="x", padx=10, pady=5)
 
+        board_header = ctk.CTkFrame(board_frame, height=40)
+        board_header.pack(fill="x", padx=10, pady=(10, 5))
+        board_header.pack_propagate(False)
+        ctk.CTkLabel(board_header, text=f"Материнская плата",
+                     font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
+        self.board_label = ctk.CTkLabel(board_frame, text=get_board_model(), font=ctk.CTkFont(size=16))
+        self.board_label.pack()
+        
+        
     def create_network_section(self, parent):
         net_frame = ctk.CTkFrame(parent)
         net_frame.pack(fill="x", padx=10, pady=5)

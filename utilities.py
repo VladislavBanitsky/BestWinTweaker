@@ -102,7 +102,15 @@ def get_ddr_type():
         return ddr_type
     else:
         return ddr_list[0]['part_number']
-        
+
+# Функция для получения модели материнской платы      
+def get_board_model():
+    c = wmi.WMI()
+    # Запрашиваем информацию о материнской плате (BaseBoard)
+    for board in c.Win32_BaseBoard():
+        board_brand = board.Manufacturer
+        board_model = board.Product  # Модель обычно хранится в Product
+    return board_brand + " " + board_model
 
 # Функция для корректного поиска файлов
 def resource_path(relative_path):
