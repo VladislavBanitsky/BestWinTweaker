@@ -9,20 +9,47 @@ import wmi
 from tkinter import messagebox
 import subprocess
 import traceback
+import pythoncom
 
 # Функция для проверки типа диска
 def get_disk_type(drive_letter='C:'):
-    """Определение типа диска в Windows"""
+    """Определение типа диска в Windows (работает в потоках)"""
+    # Инициализируем COM для текущего потока (важно!)
+    pythoncom.CoInitialize()
+    
     try:
-        # Получаем информацию о диске через PowerShell
-        cmd = f'powershell "Get-PhysicalDisk | Where-Object {{$_.DeviceId -eq (Get-Partition -DriveLetter {drive_letter[0]} | Get-Disk).Number}} | Select-Object MediaType"'
-        result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
-        if 'SSD' in result.stdout:
-            return 'SSD'
-        elif 'HDD' in result.stdout:
-            return 'HDD'
+        c = wmi.WMI()
+        drive_letter_clean = drive_letter[0] if drive_letter else 'C'
+        
+        # Получаем информацию о физическом диске
+        for disk in c.Win32_DiskDrive():
+            # Находим соответствие между диском и буквой
+            for partition in disk.associators("Win32_DiskDriveToDiskPartition"):
+                for logical_disk in partition.associators("Win32_LogicalDiskToPartition"):
+                    if logical_disk.DeviceID == f"{drive_letter_clean}:":
+                        model = disk.Model.lower() if disk.Model else ""
+                        
+                        # Анализируем модель диска
+                        if any(ssd_indicator in model for ssd_indicator in ['ssd', 'nvme', 'solid state', 'xpg', 'adata']):
+                            return 'SSD'
+                        elif any(hdd_indicator in model for hdd_indicator in ['hdd', 'st1000', 'wd10', 'hgst']):
+                            return 'HDD'
+                        
+                        # Если по модели не определили, пробуем через другие поля
+                        if hasattr(disk, 'MediaType') and disk.MediaType:
+                            if 'SSD' in disk.MediaType:
+                                return 'SSD'
+                        
+                        # Возвращаем модель для информации
+                        return disk.Model if disk.Model else 'Unknown'
+                        
     except Exception as e:
-        print(f"Ошибка при определении типа диска в Windows: {e}")
+        print(f"Ошибка при определении типа диска: {e}")
+        traceback.print_exc()
+    finally:
+        # Обязательно освобождаем COM
+        pythoncom.CoUninitialize()
+    
     return 'Unknown'
 
 # Функция для получения информации об оперативной памяти
@@ -96,12 +123,46 @@ def get_ddr_info():
 
 # Функция для получения типа оперативной памяти
 def get_ddr_type():
+    """Определение типа DDR с поддержкой Windows 7"""
     ddr_list = get_ddr_info()
-    ddr_type = ddr_list[0]['type']
+    if not ddr_list:
+        return "Unknown"
+    
+    memory_info = ddr_list[0]
+    
+    # 1. Сначала пробуем MemoryType
+    ddr_type = memory_info.get('type', 'Unknown')
     if ddr_type != "Unknown":
         return ddr_type
-    else:
-        return ddr_list[0]['part_number']
+    
+    # 2. Пробуем извлечь из PartNumber
+    part_number = memory_info.get('part_number', '')
+    if part_number and part_number != "Unknown":
+        # Ищем индикаторы в PartNumber
+        part_upper = part_number.upper()
+        if 'PC3' in part_upper:
+            return 'DDR3'
+        elif 'PC4' in part_upper:
+            return 'DDR4'
+        elif 'PC2' in part_upper:
+            return 'DDR2'
+        elif 'PC5' in part_upper:
+            return 'DDR5'
+    
+    # 3. Пробуем определить по скорости (Speed)
+    speed = memory_info.get('speed_mhz', 0)
+    if speed:
+        if 800 <= speed <= 1600:
+            return 'DDR3'  # Типичные частоты DDR3
+        elif 1600 <= speed <= 3200:
+            return 'DDR4'  # Типичные частоты DDR4
+        elif 3200 <= speed <= 6400:
+            return 'DDR5'  # Типичные частоты DDR5
+        elif 400 <= speed <= 800:
+            return 'DDR2'
+    
+    # 4. Если ничего не помогло
+    return f"Unknown ({part_number})"
 
 # Функция для получения модели материнской платы      
 def get_board_model():

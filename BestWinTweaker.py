@@ -19,7 +19,7 @@ from TweakerTools import *
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-VERSION = "1.9"
+VERSION = "1.9.2"
 
 # Для скрытого опроса видеокарты
 import subprocess
@@ -53,7 +53,8 @@ import GPUtil
 class BestWinTweaker:
     """Класс графического интерфейса"""
     
-    def __init__(self):
+    def __init__(self, initial_data):
+        self.initial_data = initial_data or {}
         self.window = ctk.CTk()
         self.window.title("BestWinTweaker - Системный монитор и оптимизатор")
         self.window.geometry("1400x750")
@@ -68,10 +69,67 @@ class BestWinTweaker:
         self._ram_updating = False
         self._disk_cache = {}
         self._ram_cache = {}
+        
+        # Загружаем предварительные данные
+        self.preloaded_disks = self.initial_data.get('Диски', {})
+        self.preloaded_ram = self.initial_data.get('Оперативная память', {})
+        self.preloaded_cpu = self.initial_data.get('CPU', {})
+        self.preloaded_gpu = self.initial_data.get('Видеокарта', [])
+        self.preloaded_network = self.initial_data.get('Сеть', {})
+        self.preloaded_board = self.initial_data.get('Материнская плата', {})
+        self.preloaded_autostart = self.initial_data.get('Автозагрузка', [])
+        self.preloaded_uwp = self.initial_data.get('UWP приложения', [])
 
         self.setup_ui()
+        self.apply_preloaded_data()  # Применяем предзагруженные данные
         self.start_updates()
-
+    
+    def apply_preloaded_data(self):
+        """Применяет данные, загруженные во время заставки"""
+        
+        # Применяем CPU данные
+        if self.preloaded_cpu and 'name' in self.preloaded_cpu:
+            self.cpu_name.configure(text=self.preloaded_cpu['name'])
+            self.cores_label.configure(
+                text=f"Ядер: {self.preloaded_cpu.get('cores_logical', 0)} логических, "
+                     f"{self.preloaded_cpu.get('cores_physical', 0)} физических"
+            )
+        
+        # Применяем RAM данные
+        if self.preloaded_ram and 'ddr_type' in self.preloaded_ram:
+            # Обновляем заголовок RAM с типом
+            self.update_ram_header()
+        
+        # Применяем данные дисков
+        if self.preloaded_disks:
+            self._disk_cache = self.preloaded_disks
+            self._update_disk_ui()
+        
+        # Применяем данные GPU
+        if self.preloaded_gpu:
+            self._update_gpu_ui(self.preloaded_gpu)
+        
+        # Применяем данные сети
+        if self.preloaded_network:
+            total_download_gb = self.preloaded_network.get('bytes_recv_gb', 0)
+            total_upload_gb = self.preloaded_network.get('bytes_sent_gb', 0)
+            self.total_download_label.configure(text=f"Всего скачано: {total_download_gb:.2f} GB")
+            self.total_upload_label.configure(text=f"Всего отправлено: {total_upload_gb:.2f} GB")
+        
+        # Применяем данные материнской платы
+        if self.preloaded_board and 'model' in self.preloaded_board:
+            self.board_label.configure(text=self.preloaded_board['model'])
+        
+        # Применяем данные автозагрузки
+        if self.preloaded_autostart:
+            self.autostart_programs = self.preloaded_autostart
+            self.load_autostart_programs()
+        
+        # Применяем UWP данные
+        if self.preloaded_uwp:
+            self.uwp_apps = self.preloaded_uwp
+            self.display_uwp_apps_fixed()
+    
     def setup_ui(self):
         # Главный контейнер
         self.main_container = ctk.CTkFrame(self.window)
@@ -1058,8 +1116,14 @@ class BestWinTweaker:
                     self.disk_widgets[device] = [disk_frame, name_label, progress, info_label]
 
                 _, _, progress, info_label = self.disk_widgets[device]
-                used_gb = info['used'] / (1024 ** 3)
-                total_gb = info['total'] / (1024 ** 3)
+                
+                # Безопасное получение значений
+                if 'used' in info and 'total' in info:
+                    used_gb = info['used'] / (1024 ** 3)
+                    total_gb = info['total'] / (1024 ** 3)
+                else:
+                    used_gb = info.get('used_gb', 0)
+                    total_gb = info.get('total_gb', 0)
 
                 progress.set(info['percent'] / 100)
                 info_label.configure(text=f"Использовано: {info['percent']:.1f}% ({used_gb:.1f}/{total_gb:.1f} GB)")

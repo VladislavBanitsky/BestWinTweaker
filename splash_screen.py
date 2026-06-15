@@ -1,14 +1,13 @@
-# splash_screen_simple.py
-# Простая и надежная заставка для BestWinTweaker
-
+# splash_screen.py
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
+import threading
 
 class SplashScreen:
-    """Простая заставка для приложения"""
+    """Заставка с поддержкой фоновой загрузки данных"""
     
-    def __init__(self):
+    def __init__(self, initial_data=None):
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.configure(bg='#1a1a2e')
@@ -23,16 +22,18 @@ class SplashScreen:
         self.root.geometry(f"{self.width}x{self.height}+{x}+{y}")
         self.root.attributes('-topmost', True)
         
+        # Данные для загрузки
+        self.loaded_data = initial_data or {}
+        self.loading_complete = False
+        
         # Создаем UI
         self.setup_ui()
         
     def setup_ui(self):
         """Создание интерфейса"""
-        # Основной фрейм
         main_frame = tk.Frame(self.root, bg='#1a1a2e')
         main_frame.pack(fill='both', expand=True)
         
-        # Центральный контейнер
         center_frame = tk.Frame(main_frame, bg='#1a1a2e')
         center_frame.place(relx=0.5, rely=0.5, anchor='center')
         
@@ -83,7 +84,7 @@ class SplashScreen:
         # Версия
         tk.Label(
             main_frame,
-            text="Версия 1.9",
+            text="BestWinTweaker 1.9.2",
             font=('Segoe UI', 8),
             fg='#666666',
             bg='#1a1a2e'
@@ -95,6 +96,22 @@ class SplashScreen:
         if progress is not None:
             self.progress['value'] = progress
         self.root.update()
+        
+    def set_loading_data(self, key, value):
+        """Сохранить загруженные данные"""
+        self.loaded_data[key] = value
+        
+    def get_loading_data(self):
+        """Получить все загруженные данные"""
+        return self.loaded_data
+        
+    def is_loading_complete(self):
+        """Проверить, завершена ли загрузка"""
+        return self.loading_complete
+        
+    def complete_loading(self):
+        """Завершить загрузку"""
+        self.loading_complete = True
         
     def close(self):
         """Закрытие заставки"""

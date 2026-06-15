@@ -1,3 +1,28 @@
+# Для скрытого опроса видеокарты
+import subprocess
+import os
+
+# Модифицируем subprocess.Popen глобально для всего приложения
+_original_popen = subprocess.Popen
+
+
+def _silent_popen(*args, **kwargs):
+    """Глобально скрываем все консольные окна"""
+    # Настройки для скрытия окон
+    if 'startupinfo' not in kwargs:
+        kwargs['startupinfo'] = subprocess.STARTUPINFO()
+        kwargs['startupinfo'].dwFlags = subprocess.STARTF_USESHOWWINDOW
+        kwargs['startupinfo'].wShowWindow = subprocess.SW_HIDE
+
+    kwargs['creationflags'] = kwargs.get('creationflags', 0) | subprocess.CREATE_NO_WINDOW
+    kwargs['stdin'] = subprocess.DEVNULL
+
+    return _original_popen(*args, **kwargs)
+
+
+# Применяем патч глобально
+subprocess.Popen = _silent_popen
+
 import subprocess
 import json
 import re
@@ -30,7 +55,7 @@ class UWPRemover:
             except:
                 encoding = 'utf-8'
             
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding=encoding, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding=encoding, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
             
             if result.returncode == 0 and result.stdout and result.stdout != 'null':
                 json_str = result.stdout.strip()

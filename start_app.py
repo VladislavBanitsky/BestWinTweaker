@@ -1,72 +1,65 @@
 # start_app.py
-# Альтернативная версия с использованием after()
-
 import multiprocessing
-import sys
-
+import threading
+import time
 from splash_screen import SplashScreen
-from BestWinTweaker import BestWinTweaker
+from data_loader import DataLoader
 
 class AppLauncher:
-    """Класс для запуска приложения с заставкой"""
+    """Класс для запуска приложения с заставкой и фоновой загрузкой"""
     
     def __init__(self):
         self.splash = None
         self.app = None
-        self.loading_step = 0
-        
-        # Этапы загрузки
-        self.loading_steps = [
-            ("Загрузка компонентов", 10),
-            ("Инициализация модулей", 30),
-            ("Настройка интерфейса", 60),
-            ("Проверка системы", 80),
-            ("Запуск приложения", 95)
-        ]
+        self.loaded_data = None
         
     def start(self):
         """Запуск процесса загрузки"""      
         # Создаем заставку
         self.splash = SplashScreen()
         
-        # Начинаем загрузку
-        self.next_loading_step()
+        # Запускаем загрузку данных в отдельном потоке
+        loading_thread = threading.Thread(target=self.load_data_in_background)
+        loading_thread.daemon = True
+        loading_thread.start()
         
         # Запускаем главный цикл заставки
         self.splash.run()
         
-    def next_loading_step(self):
-        """Следующий шаг загрузки"""
-        if self.loading_step < len(self.loading_steps):
-            status, progress = self.loading_steps[self.loading_step]
-            self.splash.set_status(status, progress)
-            self.loading_step += 1
-            # Запланировать следующий шаг через 300 мс
-            self.splash.root.after(300, self.next_loading_step)
-        else:
-            # Загрузка завершена, запускаем приложение
-            self.start_app()
+    def load_data_in_background(self):
+        """Загрузка данных в фоновом режиме"""
+        try:
+            # Создаем загрузчик данных
+            loader = DataLoader(self.splash)
+            
+            # Загружаем все данные
+            self.loaded_data = loader.load_all_data()
+            
+            # Ждем немного для плавности
+            time.sleep(0.5)
+            
+            # Запускаем основное приложение
+            self.splash.root.after(0, self.start_app)
+            
+        except Exception as e:
+            self.splash.set_status(f"Ошибка: {str(e)[:40]}", 100)
+            self.splash.root.after(2000, lambda: self.splash.close())
+            print(f"Ошибка загрузки: {e}")
             
     def start_app(self):
-        """Запуск основного приложения"""
-        try:            
-            self.splash.set_status("Готово", 100)
-            self.splash.root.after(200, self.finish_loading)
-        except Exception as e:
-            self.show_error(e)
+        """Запуск основного приложения с переданными данными"""
+        try:
+            self.splash.close()
             
-    def finish_loading(self):
-        """Завершение загрузки"""
-        self.splash.close()
-        # Запускаем основное приложение
-        self.app = BestWinTweaker()
-        self.app.run()
-        
-    def show_error(self, error):
-        """Показать ошибку"""
-        self.splash.set_status(f"Ошибка: {str(error)[:40]}", 100)
-        self.splash.root.after(2000, lambda: self.splash.close())
-        print(f"Ошибка: {error}")
+            # Импортируем BestWinTweaker после загрузки
+            from BestWinTweaker import BestWinTweaker
+            
+            # Запускаем приложение с предзагруженными данными
+            self.app = BestWinTweaker(initial_data=self.loaded_data)
+            self.app.run()
+            
+        except Exception as e:
+            print(f"Ошибка запуска: {e}")
 
 def main():
     """Главная функция"""
@@ -74,5 +67,6 @@ def main():
     launcher.start()
 
 if __name__ == "__main__":
+    # Pyinstaller fix
     multiprocessing.freeze_support()
     main()

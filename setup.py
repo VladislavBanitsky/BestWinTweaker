@@ -78,6 +78,8 @@ args = [
     "--hidden-import=requests",      # Добавлено для Fido
     "--hidden-import=fido_integration",  # Добавлено для Fido
     "--hidden-import=fido_gui",      # Добавлено для Fido
+    "--hidden-import=pythoncom",
+    "--hidden-import=pywin32",
     "--collect-data=customtkinter",  # Собираем темы customtkinter
     "--uac-admin",                   # Запуск от администратора
     "--clean",                       # Очистка временных файлов
