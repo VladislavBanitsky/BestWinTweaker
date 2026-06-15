@@ -17,7 +17,20 @@ class UWPRemover:
             cmd = ['powershell', '-Command', 
                    'Get-AppxPackage | Where-Object { $_.IsFramework -eq $false -and $_.SignatureKind -ne "System" } | Select-Object Name, PackageFullName, Publisher, Version, InstallLocation | ConvertTo-Json -Compress']
             
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', timeout=30)
+            # Определяем кодировку в зависимости от версии Windows
+            # Для Windows 7 и более старых версий используем cp866
+            # Для новых версий - utf-8
+            try:
+                import sys
+                win_ver = sys.getwindowsversion()
+                if win_ver.major < 10:  # Windows 7, 8, 8.1
+                    encoding = 'cp866'
+                else:
+                    encoding = 'utf-8'
+            except:
+                encoding = 'utf-8'
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding=encoding, timeout=30)
             
             if result.returncode == 0 and result.stdout and result.stdout != 'null':
                 json_str = result.stdout.strip()

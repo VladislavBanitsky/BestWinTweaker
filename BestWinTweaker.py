@@ -1010,7 +1010,8 @@ class BestWinTweaker:
                         pass
                 self._disk_cache = current_disks
                 # Обновляем UI в главном потоке
-                self.window.after(0, self._update_disk_ui)
+                if self.running:
+                    self.window.after(0, self._update_disk_ui)
             except Exception as e:
                 print(f"Disk update error in thread: {e}")
             finally:
@@ -1021,6 +1022,9 @@ class BestWinTweaker:
     def _update_disk_ui(self):
         """Обновление UI с информацией о дисках"""
         try:
+            if not self.running:
+                return
+                
             # Удаляем индикатор загрузки, если он есть
             if hasattr(self, 'disk_loading_label') and self.disk_loading_label.winfo_exists():
                 self.disk_loading_label.destroy()
