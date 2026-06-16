@@ -126,44 +126,43 @@ def get_ddr_info():
 def get_ddr_type():
     """Определение типа DDR с поддержкой Windows 7"""
     ddr_list = get_ddr_info()
+    ddr_type = ""
     if not ddr_list:
-        return "Unknown"
+        ddr_type = "Unknown"
+        return ddr_type
     
     memory_info = ddr_list[0]
     
     # 1. Сначала пробуем MemoryType
     ddr_type = memory_info.get('type', 'Unknown')
-    if ddr_type != "Unknown":
-        return ddr_type
     
     # 2. Пробуем извлечь из PartNumber
     part_number = memory_info.get('part_number', '')
     if part_number and part_number != "Unknown":
         # Ищем индикаторы в PartNumber
         part_upper = part_number.upper()
-        if 'PC3' in part_upper:
-            return 'DDR3'
+        if 'PC2' in part_upper:
+            ddr_type = 'DDR2 '
+        elif 'PC3' in part_upper:
+            ddr_type = 'DDR3 '
         elif 'PC4' in part_upper:
-            return 'DDR4'
-        elif 'PC2' in part_upper:
-            return 'DDR2'
+            ddr_type = 'DDR4 '
         elif 'PC5' in part_upper:
-            return 'DDR5'
+            ddr_type = 'DDR5 '
     
     # 3. Пробуем определить по скорости (Speed)
     speed = memory_info.get('speed_mhz', 0)
     if speed:
-        if 800 <= speed <= 1600:
-            return 'DDR3'  # Типичные частоты DDR3
+        if 400 <= speed <= 800:
+            ddr_type = 'DDR2 '
+        elif 800 <= speed <= 1600:
+            ddr_type = 'DDR3 '
         elif 1600 <= speed <= 3200:
-            return 'DDR4'  # Типичные частоты DDR4
+            ddr_type = 'DDR4 '
         elif 3200 <= speed <= 6400:
-            return 'DDR5'  # Типичные частоты DDR5
-        elif 400 <= speed <= 800:
-            return 'DDR2'
-    
-    # 4. Если ничего не помогло
-    return f"Unknown ({part_number})"
+            ddr_type = 'DDR5 '
+            
+    return ddr_type + str(speed) +"МГц (" + part_number + ")"
 
 # Функция для получения модели материнской платы      
 def get_board_model():
