@@ -14,42 +14,43 @@ import pythoncom
 # Функция для проверки типа диска
 def get_disk_type(drive_letter='C:'):
     """Определение типа диска в Windows (работает в потоках)"""
-    # Инициализируем COM для текущего потока (важно!)
-    pythoncom.CoInitialize()
-    
+    pythoncom.CoInitialize()  # инициализируем COM для текущего потока (важно!)
     try:
         c = wmi.WMI()
         drive_letter_clean = drive_letter[0] if drive_letter else 'C'
         
-        # Получаем информацию о физическом диске
+        # Получаем информацию о физическом диске (# Windows 7)
         for disk in c.Win32_DiskDrive():
+            disk_type = ""
             # Находим соответствие между диском и буквой
             for partition in disk.associators("Win32_DiskDriveToDiskPartition"):
                 for logical_disk in partition.associators("Win32_LogicalDiskToPartition"):
                     if logical_disk.DeviceID == f"{drive_letter_clean}:":
                         model = disk.Model.lower() if disk.Model else ""
-                        
                         # Анализируем модель диска
                         if any(ssd_indicator in model for ssd_indicator in ['ssd', 'nvme', 'solid state', 'xpg', 'adata']):
-                            return 'SSD'
+                            disk_type = 'SSD '
                         elif any(hdd_indicator in model for hdd_indicator in ['hdd', 'st1000', 'wd10', 'hgst']):
-                            return 'HDD'
-                        
+                            disk_type = 'HDD '
+                        else:
+                            # Получаем информацию о диске через PowerShell (# Windows 8-11)
+                            cmd = f'powershell "Get-PhysicalDisk | Where-Object {{$_.DeviceId -eq (Get-Partition -DriveLetter {drive_letter[0]} | Get-Disk).Number}} | Select-Object MediaType"'
+                            result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+                            if 'SSD' in result.stdout:  
+                                disk_type = 'SSD '
+                            elif 'HDD' in result.stdout:
+                                disk_type = 'HDD '                        
                         # Если по модели не определили, пробуем через другие поля
                         if hasattr(disk, 'MediaType') and disk.MediaType:
                             if 'SSD' in disk.MediaType:
-                                return 'SSD'
-                        
-                        # Возвращаем модель для информации
-                        return disk.Model if disk.Model else 'Unknown'
-                        
+                                disk_type = 'SSD '           
+                        return disk_type + disk.Model if disk.Model else 'Unknown'  # возвращаем тип и модель для информации           
     except Exception as e:
         print(f"Ошибка при определении типа диска: {e}")
         traceback.print_exc()
     finally:
         # Обязательно освобождаем COM
         pythoncom.CoUninitialize()
-    
     return 'Unknown'
 
 # Функция для получения информации об оперативной памяти
