@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 
-from utilities import get_disk_type, get_ddr_type, get_board_model, resource_path, callback, get_windows_version, start_download
+from utilities import get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, get_windows_version, start_download
 from uwpremover import *
 from TweakerTools import *
 
@@ -861,11 +861,14 @@ class BestWinTweaker:
         ram_header = ctk.CTkFrame(ram_frame, height=40)
         ram_header.pack(fill="x", padx=10, pady=(10, 5))
         ram_header.pack_propagate(False)
-        
-        
-        ctk.CTkLabel(ram_header, text=f"RAM - Оперативная память ({get_ddr_type()})",
+                
+        ctk.CTkLabel(ram_header, text=f"RAM - Оперативная память",
                      font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
-
+        
+        self.ram_name = ctk.CTkLabel(ram_frame, text=f"{get_ddr_type()}",
+                                     font=ctk.CTkFont(size=16, weight="bold"))
+        self.ram_name.pack(anchor="w", padx=10, pady=(5, 0))
+        
         self.ram_progress = ctk.CTkProgressBar(ram_frame, height=20)
         self.ram_progress.pack(fill="x", pady=10, padx=20)
         self.ram_progress.set(0)
@@ -890,8 +893,8 @@ class BestWinTweaker:
         board_header.pack_propagate(False)
         ctk.CTkLabel(board_header, text=f"Материнская плата",
                      font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
-        self.board_label = ctk.CTkLabel(board_frame, text=get_board_model(), font=ctk.CTkFont(size=16))
-        self.board_label.pack()
+        self.board_label = ctk.CTkLabel(board_frame, text=get_board_model(), font=ctk.CTkFont(size=16, weight="bold"))
+        self.board_label.pack(side="left", padx=10)
         
         
     def create_network_section(self, parent):
@@ -906,26 +909,26 @@ class BestWinTweaker:
                      font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
 
         info_frame = ctk.CTkFrame(net_frame)
-        info_frame.pack(fill="x", padx=20, pady=10)
+        info_frame.pack(fill="x", padx=20, pady=5)
 
         self.download_label = ctk.CTkLabel(info_frame, text="Загрузка: 0 MB/s",
                                            font=ctk.CTkFont(size=16))
-        self.download_label.pack(pady=3)
+        self.download_label.pack(side="left", pady=3)
 
         self.upload_label = ctk.CTkLabel(info_frame, text="Отдача: 0 MB/s",
                                          font=ctk.CTkFont(size=16))
-        self.upload_label.pack(pady=3)
+        self.upload_label.pack(side="right", pady=3)
 
         traffic_frame = ctk.CTkFrame(net_frame)
         traffic_frame.pack(fill="x", padx=20, pady=5)
 
         self.total_download_label = ctk.CTkLabel(traffic_frame, text="Всего скачано: 0 GB",
                                                  font=ctk.CTkFont(size=16))
-        self.total_download_label.pack(pady=2)
+        self.total_download_label.pack(side="left", pady=2)
 
         self.total_upload_label = ctk.CTkLabel(traffic_frame, text="Всего отправлено: 0 GB",
                                                font=ctk.CTkFont(size=16))
-        self.total_upload_label.pack(pady=2)
+        self.total_upload_label.pack(side="right", pady=2)
 
         self.prev_net = psutil.net_io_counters()
         self.prev_time = time.time()
