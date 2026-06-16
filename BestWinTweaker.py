@@ -1187,6 +1187,7 @@ class BestWinTweaker:
                         future = executor.submit(GPUtil.getGPUs)
                         try:
                             gpus = future.result(timeout=2.0)
+                            print(f"GPUtil found {len(gpus)} GPU(s)")
                         except (concurrent.futures.TimeoutError, Exception) as e:
                             print(f"GPUtil error: {e}")
                             gpus = []
@@ -1202,22 +1203,23 @@ class BestWinTweaker:
                             pythoncom.CoUninitialize()
                             
                             if gpu_wmi:
-                                # Создаем объекты, совместимые с GPUtil
-                                class GPUShim:
-                                    def __init__(self, wmi_gpu):
-                                        self.name = getattr(wmi_gpu, 'Name', 'Unknown GPU')
-                                        self.load = 0.0
-                                        self.temperature = 0.0
-                                        # Конвертируем байты в MB
+                                for wmi_gpu in gpu_wmi:
+                                    gpu_name = getattr(wmi_gpu, 'Name', '')
+                                    if gpu_name and not gpu_name.startswith('Microsoft'):
+                                        # Создаем словарь вместо объекта
+                                        gpu_dict = {
+                                            'name': gpu_name,
+                                            'load': 0.0,
+                                            'temperature': 0.0,
+                                            'memory_used': 0,
+                                            'memory_total': 0,
+                                            'memory_util': 0.0
+                                        }
+                                        # Пробуем получить память
                                         ram_bytes = getattr(wmi_gpu, 'AdapterRAM', 0)
                                         if ram_bytes and ram_bytes > 0:
-                                            self.memoryTotal = ram_bytes / (1024 ** 2)
-                                        else:
-                                            self.memoryTotal = 0
-                                        self.memoryUsed = 0
-                                        self.memoryUtil = 0.0
-                                
-                                gpus = [GPUShim(gpu) for gpu in gpu_wmi if getattr(gpu, 'Name', '')]
+                                            gpu_dict['memory_total'] = ram_bytes / (1024 ** 2)
+                                        gpus.append(gpu_dict)
                                 print(f"WMI found {len(gpus)} GPU(s)")
                         except Exception as e:
                             print(f"WMI GPU fallback error: {e}")
@@ -1241,15 +1243,12 @@ class BestWinTweaker:
         try:
             # Проверяем, есть ли данные
             if not gpus or (isinstance(gpus, list) and len(gpus) == 0):
-                # Если GPU нет, показываем сообщение
                 if hasattr(self, '_gpu_detected') and self._gpu_detected:
-                    return  # Сохраняем последние данные
+                    return
                 
-                # Удаляем все старые виджеты
                 for widget in self.gpu_container.winfo_children():
                     widget.destroy()
                 
-                # Показываем сообщение
                 self.gpu_label = ctk.CTkLabel(
                     self.gpu_container, 
                     text="GPU не обнаружен",
@@ -1258,10 +1257,9 @@ class BestWinTweaker:
                 self.gpu_label.pack(pady=10)
                 return
             
-            # Помечаем, что GPU был обнаружен
             self._gpu_detected = True
             
-            # Удаляем все старые виджеты, включая gpu_label
+            # Удаляем все старые виджеты
             for widget in self.gpu_container.winfo_children():
                 widget.destroy()
             
@@ -1269,12 +1267,30 @@ class BestWinTweaker:
             for i, gpu in enumerate(gpus):
                 gpu_id = f"gpu_{i}"
                 
+                # Получаем данные в зависимости от типа объекта
+                if hasattr(gpu, 'name'):  # Объект с атрибутами
+                    gpu_name = gpu.name
+                    gpu_load = gpu.load * 100 if hasattr(gpu, 'load') else 0
+                    gpu_temp = gpu.temperature if hasattr(gpu, 'temperature') else 0
+                    gpu_memory_used = gpu.memoryUsed if hasattr(gpu, 'memoryUsed') else 0
+                    gpu_memory_total = gpu.memoryTotal if hasattr(gpu, 'memoryTotal') else 0
+                    gpu_memory_util = gpu.memoryUtil * 100 if hasattr(gpu, 'memoryUtil') else 0
+                elif isinstance(gpu, dict):  # Словарь
+                    gpu_name = gpu.get('name', 'Unknown GPU')
+                    gpu_load = gpu.get('load', 0)
+                    gpu_temp = gpu.get('temperature', 0)
+                    gpu_memory_used = gpu.get('memory_used', 0)
+                    gpu_memory_total = gpu.get('memory_total', 0)
+                    gpu_memory_util = gpu.get('memory_util', 0)
+                else:
+                    continue
+                
                 gpu_card_frame = ctk.CTkFrame(self.gpu_container)
                 gpu_card_frame.pack(fill="x", pady=3)
                 
                 name_label = ctk.CTkLabel(
                     gpu_card_frame, 
-                    text=gpu.name,
+                    text=gpu_name,
                     font=ctk.CTkFont(size=14, weight="bold")
                 )
                 name_label.pack(anchor="w", padx=10, pady=(5, 0))
@@ -1292,15 +1308,20 @@ class BestWinTweaker:
                 self.gpu_widgets[gpu_id] = [gpu_card_frame, name_label, load_progress, info_label]
                 
                 # Обновляем данные
-                gpu_load = gpu.load * 100
-                load_progress.set(gpu_load / 100)
-                info_label.configure(
-                    text=f"Загрузка: {gpu_load:.1f}% | Температура: {gpu.temperature:.0f}°C | "
-                         f"Память: {gpu.memoryUtil * 100:.1f}% | VRAM: {gpu.memoryUsed:.0f}/{gpu.memoryTotal:.0f} MB"
-                )
+                load_progress.set(gpu_load / 100 if gpu_load > 0 else 0)
+                
+                if gpu_memory_total > 0:
+                    info_text = f"Загрузка: {gpu_load:.1f}% | Температура: {gpu_temp:.0f}°C | "
+                    info_text += f"Память: {gpu_memory_util:.1f}% | VRAM: {gpu_memory_used:.0f}/{gpu_memory_total:.0f} MB"
+                else:
+                    info_text = f"Загрузка: {gpu_load:.1f}% | Температура: {gpu_temp:.0f}°C"
+                
+                info_label.configure(text=info_text)
                     
         except Exception as e:
             print(f"GPU UI update error: {e}")
+            import traceback
+            traceback.print_exc()
 
     def update_time_info(self):
         try:
