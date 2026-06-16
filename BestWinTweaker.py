@@ -63,6 +63,7 @@ class BestWinTweaker:
         # Переменные для обновления
         self.running = True
         self.update_interval = 2000
+        self._gpu_detected = False  # Добавьте эту строку
         
         # Флаги для потоков
         self._disk_updating = False
@@ -1169,36 +1170,65 @@ class BestWinTweaker:
             print(f"Network update error: {e}")
 
     def update_gpu_info(self):
-        """Обновление информации о GPU в отдельном потоке (без зависаний)"""
+        """Обновление информации о GPU"""
         try:
-            # Запускаем обновление в потоке
-            if not hasattr(self, '_gpu_updating'):
-                self._gpu_updating = False
-
             if self._gpu_updating:
-                return  # Предыдущее обновление еще выполняется
+                return
 
             self._gpu_updating = True
 
             def _update_gpu_in_thread():
                 try:
-                    # Устанавливаем таймаут для GPU-запросов через отдельный поток
                     import concurrent.futures
-
+                    gpus = []
+                    
+                    # Пробуем GPUtil
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                         future = executor.submit(GPUtil.getGPUs)
                         try:
-                            gpus = future.result(timeout=2.0)  # 2 секунды таймаут
-                        except concurrent.futures.TimeoutError:
-                            print("GPU check timeout")
+                            gpus = future.result(timeout=2.0)
+                        except (concurrent.futures.TimeoutError, Exception) as e:
+                            print(f"GPUtil error: {e}")
                             gpus = []
+                    
+                    # Если GPUtil не нашел GPU, пробуем WMI
+                    if not gpus:
+                        try:
+                            import wmi
+                            import pythoncom
+                            pythoncom.CoInitialize()
+                            c = wmi.WMI()
+                            gpu_wmi = c.Win32_VideoController()
+                            pythoncom.CoUninitialize()
+                            
+                            if gpu_wmi:
+                                # Создаем объекты, совместимые с GPUtil
+                                class GPUShim:
+                                    def __init__(self, wmi_gpu):
+                                        self.name = getattr(wmi_gpu, 'Name', 'Unknown GPU')
+                                        self.load = 0.0
+                                        self.temperature = 0.0
+                                        # Конвертируем байты в MB
+                                        ram_bytes = getattr(wmi_gpu, 'AdapterRAM', 0)
+                                        if ram_bytes and ram_bytes > 0:
+                                            self.memoryTotal = ram_bytes / (1024 ** 2)
+                                        else:
+                                            self.memoryTotal = 0
+                                        self.memoryUsed = 0
+                                        self.memoryUtil = 0.0
+                                
+                                gpus = [GPUShim(gpu) for gpu in gpu_wmi if getattr(gpu, 'Name', '')]
+                                print(f"WMI found {len(gpus)} GPU(s)")
+                        except Exception as e:
+                            print(f"WMI GPU fallback error: {e}")
+                    
+                    self.window.after(0, lambda: self._update_gpu_ui(gpus))
+                    self._gpu_updating = False
+
                 except Exception as e:
                     print(f"GPU check error: {e}")
-                    gpus = []
-
-                # Обновляем UI в главном потоке
-                self.window.after(0, lambda: self._update_gpu_ui(gpus))
-                self._gpu_updating = False
+                    self.window.after(0, lambda: self._update_gpu_ui([]))
+                    self._gpu_updating = False
 
             threading.Thread(target=_update_gpu_in_thread, daemon=True).start()
 
@@ -1209,52 +1239,66 @@ class BestWinTweaker:
     def _update_gpu_ui(self, gpus):
         """Обновление UI с информацией о GPU (выполняется в главном потоке)"""
         try:
-            # Удаляем все старые виджеты, кроме gpu_label
-            for widget in self.gpu_container.winfo_children():
-                if widget != self.gpu_label:
+            # Проверяем, есть ли данные
+            if not gpus or (isinstance(gpus, list) and len(gpus) == 0):
+                # Если GPU нет, показываем сообщение
+                if hasattr(self, '_gpu_detected') and self._gpu_detected:
+                    return  # Сохраняем последние данные
+                
+                # Удаляем все старые виджеты
+                for widget in self.gpu_container.winfo_children():
                     widget.destroy()
-            
-            if not gpus:
-                self.gpu_label.configure(text="GPU не обнаружен")
+                
+                # Показываем сообщение
+                self.gpu_label = ctk.CTkLabel(
+                    self.gpu_container, 
+                    text="GPU не обнаружен",
+                    font=ctk.CTkFont(size=14)
+                )
                 self.gpu_label.pack(pady=10)
                 return
-
-            self.gpu_label.pack_forget()
-
+            
+            # Помечаем, что GPU был обнаружен
+            self._gpu_detected = True
+            
+            # Удаляем все старые виджеты, включая gpu_label
+            for widget in self.gpu_container.winfo_children():
+                widget.destroy()
+            
+            # Создаем виджеты для каждого GPU
             for i, gpu in enumerate(gpus):
                 gpu_id = f"gpu_{i}"
-
-                if gpu_id not in self.gpu_widgets:
-                    gpu_card_frame = ctk.CTkFrame(self.gpu_container)
-                    gpu_card_frame.pack(fill="x", pady=0)
-
-                    name_label = ctk.CTkLabel(gpu_card_frame, text=gpu.name,
-                                              font=ctk.CTkFont(size=16, weight="bold"))
-                    name_label.pack(anchor="w", padx=10, pady=(5, 0))
-
-                    load_progress = ctk.CTkProgressBar(gpu_card_frame, height=20)
-                    load_progress.pack(fill="x", padx=10, pady=5)
-
-                    info_label = ctk.CTkLabel(gpu_card_frame, text="",
-                                              font=ctk.CTkFont(size=16))
-                    info_label.pack(anchor="w", padx=10, pady=(0, 5))
-
-                    self.gpu_widgets[gpu_id] = [gpu_card_frame, name_label, load_progress, info_label]
-
-                _, _, load_progress, info_label = self.gpu_widgets[gpu_id]
+                
+                gpu_card_frame = ctk.CTkFrame(self.gpu_container)
+                gpu_card_frame.pack(fill="x", pady=3)
+                
+                name_label = ctk.CTkLabel(
+                    gpu_card_frame, 
+                    text=gpu.name,
+                    font=ctk.CTkFont(size=14, weight="bold")
+                )
+                name_label.pack(anchor="w", padx=10, pady=(5, 0))
+                
+                load_progress = ctk.CTkProgressBar(gpu_card_frame, height=20)
+                load_progress.pack(fill="x", padx=10, pady=5)
+                
+                info_label = ctk.CTkLabel(
+                    gpu_card_frame, 
+                    text="",
+                    font=ctk.CTkFont(size=14)
+                )
+                info_label.pack(anchor="w", padx=10, pady=(0, 5))
+                
+                self.gpu_widgets[gpu_id] = [gpu_card_frame, name_label, load_progress, info_label]
+                
+                # Обновляем данные
                 gpu_load = gpu.load * 100
-
                 load_progress.set(gpu_load / 100)
                 info_label.configure(
                     text=f"Загрузка: {gpu_load:.1f}% | Температура: {gpu.temperature:.0f}°C | "
                          f"Память: {gpu.memoryUtil * 100:.1f}% | VRAM: {gpu.memoryUsed:.0f}/{gpu.memoryTotal:.0f} MB"
                 )
-
-            for gpu_id in list(self.gpu_widgets.keys()):
-                if int(gpu_id.split('_')[1]) >= len(gpus):
-                    for widget in self.gpu_widgets[gpu_id]:
-                        widget.destroy()
-                    del self.gpu_widgets[gpu_id]
+                    
         except Exception as e:
             print(f"GPU UI update error: {e}")
 
