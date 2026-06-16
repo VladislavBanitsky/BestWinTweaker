@@ -1187,7 +1187,6 @@ class BestWinTweaker:
                         future = executor.submit(GPUtil.getGPUs)
                         try:
                             gpus = future.result(timeout=2.0)
-                            print(f"GPUtil found {len(gpus)} GPU(s)")
                         except (concurrent.futures.TimeoutError, Exception) as e:
                             print(f"GPUtil error: {e}")
                             gpus = []
