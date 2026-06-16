@@ -1206,11 +1206,12 @@ class BestWinTweaker:
     def _update_gpu_ui(self, gpus):
         """Обновление UI с информацией о GPU (выполняется в главном потоке)"""
         try:
+            # Удаляем все старые виджеты, кроме gpu_label
+            for widget in self.gpu_container.winfo_children():
+                if widget != self.gpu_label:
+                    widget.destroy()
+            
             if not gpus:
-                for widgets in self.gpu_widgets.values():
-                    for widget in widgets:
-                        widget.destroy()
-                self.gpu_widgets.clear()
                 self.gpu_label.configure(text="GPU не обнаружен")
                 self.gpu_label.pack(pady=10)
                 return
