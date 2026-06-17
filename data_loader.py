@@ -3,7 +3,7 @@ import psutil
 import cpuinfo
 import GPUtil
 import threading
-from utilities import get_disk_type, get_ddr_type, get_board_model, get_windows_version
+from utilities import get_disk_type, get_ddr_type, get_board_model, get_windows_version, get_network_adapter_model
 import time
 
 
@@ -97,6 +97,21 @@ class DataLoader:
         except Exception as e:
             return {'error': str(e)}
     
+    def load_network_data(self):
+        """Загрузка данных сети"""
+        try:
+            from utilities import get_network_adapter_model
+            net = psutil.net_io_counters()
+            return {
+                'bytes_sent': net.bytes_sent,
+                'bytes_recv': net.bytes_recv,
+                'bytes_sent_gb': net.bytes_sent / (1024 ** 3),
+                'bytes_recv_gb': net.bytes_recv / (1024 ** 3),
+                'adapter_model': get_network_adapter_model(),  # Добавлено
+            }
+        except Exception as e:
+            return {'error': str(e)}
+    
     def load_disk_data(self):
         """Загрузка данных дисков"""
         try:
@@ -114,19 +129,6 @@ class DataLoader:
                 except:
                     pass
             return disks
-        except Exception as e:
-            return {'error': str(e)}
-    
-    def load_network_data(self):
-        """Загрузка данных сети"""
-        try:
-            net = psutil.net_io_counters()
-            return {
-                'bytes_sent': net.bytes_sent,
-                'bytes_recv': net.bytes_recv,
-                'bytes_sent_gb': net.bytes_sent / (1024 ** 3),
-                'bytes_recv_gb': net.bytes_recv / (1024 ** 3),
-            }
         except Exception as e:
             return {'error': str(e)}
     

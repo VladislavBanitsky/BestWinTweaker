@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 
-from utilities import get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, get_windows_version, start_download
+from utilities import no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, get_windows_version, start_download
 from uwpremover import *
 from TweakerTools import *
 
@@ -116,6 +116,8 @@ class BestWinTweaker:
             total_upload_gb = self.preloaded_network.get('bytes_sent_gb', 0)
             self.total_download_label.configure(text=f"Всего скачано: {total_download_gb:.2f} GB")
             self.total_upload_label.configure(text=f"Всего отправлено: {total_upload_gb:.2f} GB")
+            adapter_model = self.preloaded_network.get('adapter_model', 'Не обнаружено')
+            self.network_adapter_label.configure(text=f"{adapter_model}")
         
         # Применяем данные материнской платы
         if self.preloaded_board and 'model' in self.preloaded_board:
@@ -829,7 +831,7 @@ class BestWinTweaker:
 
         self.cpu_name = ctk.CTkLabel(cpu_frame, text=cpuinfo.get_cpu_info()['brand_raw'],
                                      font=ctk.CTkFont(size=16, weight="bold"))
-        self.cpu_name.pack(anchor="w", padx=10, pady=(5, 0))
+        self.cpu_name.pack(anchor="w", padx=20, pady=(5, 0))
 
         self.cpu_progress = ctk.CTkProgressBar(cpu_frame, height=20)
         self.cpu_progress.pack(fill="x", pady=10, padx=20)
@@ -868,7 +870,7 @@ class BestWinTweaker:
         
         self.ram_name = ctk.CTkLabel(ram_frame, text=f"{get_ddr_type()}",
                                      font=ctk.CTkFont(size=16, weight="bold"))
-        self.ram_name.pack(anchor="w", padx=10, pady=(5, 0))
+        self.ram_name.pack(anchor="w", padx=20, pady=(5, 0))
         
         self.ram_progress = ctk.CTkProgressBar(ram_frame, height=20)
         self.ram_progress.pack(fill="x", pady=10, padx=20)
@@ -895,7 +897,7 @@ class BestWinTweaker:
         ctk.CTkLabel(board_header, text=f"Материнская плата",
                      font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
         self.board_label = ctk.CTkLabel(board_frame, text=get_board_model(), font=ctk.CTkFont(size=16, weight="bold"))
-        self.board_label.pack(side="left", padx=10)
+        self.board_label.pack(side="left", padx=20)
         
         
     def create_network_section(self, parent):
@@ -909,6 +911,13 @@ class BestWinTweaker:
         ctk.CTkLabel(net_header, text="СЕТЬ",
                      font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
 
+        self.network_adapter_label = ctk.CTkLabel(
+            net_frame, 
+            text="Загрузка...", 
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        self.network_adapter_label.pack(anchor="w", padx=20, pady=(5, 0))
+        
         info_frame = ctk.CTkFrame(net_frame)
         info_frame.pack(fill="x", padx=20, pady=5)
 
@@ -1204,7 +1213,7 @@ class BestWinTweaker:
                             if gpu_wmi:
                                 for wmi_gpu in gpu_wmi:
                                     gpu_name = getattr(wmi_gpu, 'Name', '')
-                                    if gpu_name and not gpu_name.startswith('Microsoft'):
+                                    if gpu_name and not no_show_gpu(gpu_name):
                                         # Создаем словарь вместо объекта
                                         gpu_dict = {
                                             'name': gpu_name,
@@ -1219,7 +1228,6 @@ class BestWinTweaker:
                                         if ram_bytes and ram_bytes > 0:
                                             gpu_dict['memory_total'] = ram_bytes / (1024 ** 2)
                                         gpus.append(gpu_dict)
-                                print(f"WMI found {len(gpus)} GPU(s)")
                         except Exception as e:
                             print(f"WMI GPU fallback error: {e}")
                     
@@ -1251,7 +1259,7 @@ class BestWinTweaker:
                 self.gpu_label = ctk.CTkLabel(
                     self.gpu_container, 
                     text="GPU не обнаружен",
-                    font=ctk.CTkFont(size=14)
+                    font=ctk.CTkFont(size=16)
                 )
                 self.gpu_label.pack(pady=10)
                 return
@@ -1290,7 +1298,7 @@ class BestWinTweaker:
                 name_label = ctk.CTkLabel(
                     gpu_card_frame, 
                     text=gpu_name,
-                    font=ctk.CTkFont(size=14, weight="bold")
+                    font=ctk.CTkFont(size=16, weight="bold")
                 )
                 name_label.pack(anchor="w", padx=10, pady=(5, 0))
                 

@@ -5,6 +5,7 @@ import tempfile
 import requests
 import sys
 import os
+import re
 import wmi
 from tkinter import messagebox
 import subprocess
@@ -173,6 +174,31 @@ def get_board_model():
         board_model = board.Product  # Модель обычно хранится в Product
     return board_brand + " " + board_model
 
+# Функция для получения модели сетевой карты
+def get_network_adapter_model():
+    """Извлекает имена адаптеров из ipconfig /all"""
+    try:
+        cmd = 'ipconfig /all'
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding='cp866')
+        output = result.stdout
+        
+        # Ищем строки с описанием адаптера
+        adapters = []
+        for line in output.split('\n'):
+            if 'Описание' in line or 'Description' in line:
+                # Извлекаем текст после "Описание. . . . . . . . . . . . . : "
+                match = re.search(r'Описание[.\s]+:\s*(.+)', line)
+                if not match:
+                    match = re.search(r'Description[.\s]+:\s*(.+)', line)
+                if match:
+                    adapter_name = match.group(1).strip()
+                    # Фильтруем виртуальные адаптеры
+                    if not any(v in adapter_name for v in ['Virtual', 'Bluetooth', 'VPN', 'TAP']):
+                        adapters.append(adapter_name)
+        return "\n".join(adapters) if adapters else "Не найдено"
+    except Exception as e:
+        return f"Ошибка: {e}"
+
 # Функция для корректного поиска файлов
 def resource_path(relative_path):
     """ Получает абсолютный путь к ресурсу, работает для dev и для PyInstaller """
@@ -283,3 +309,15 @@ $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         print(f"Ошибка в start_download: {str(e)}")
         traceback.print_exc()
         messagebox.showerror("Ошибка", f"Произошла ошибка:\n{str(e)}")
+
+def no_show_gpu(gpu_name):
+    """Проверяет, является ли GPU драйвером DameWare"""
+    pythoncom.CoInitialize()  # инициализируем COM для текущего потока (важно!)
+    if not gpu_name:
+        return True
+    gpu_lower = gpu_name.lower()
+    keywords = ['Microsoft', 'driver', 'dameware', 'dame ware', 'dwrcs']
+    return any(keyword in gpu_lower for keyword in keywords)        
+        
+if __name__ == "__main__":  # ДВА подчеркивания с каждой стороны!
+    print(get_network_adapter_model())
