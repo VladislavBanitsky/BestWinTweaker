@@ -914,7 +914,7 @@ class BestWinTweaker:
         self.network_adapter_label = ctk.CTkLabel(
             net_frame, 
             text="Загрузка...", 
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(size=16, weight="bold"), justify="left"
         )
         self.network_adapter_label.pack(anchor="w", padx=20, pady=(5, 0))
         
