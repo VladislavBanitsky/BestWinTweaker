@@ -1248,6 +1248,26 @@ class BestWinTweaker:
     def _update_gpu_ui(self, gpus):
         """Обновление UI с информацией о GPU (выполняется в главном потоке)"""
         try:
+            # ФИЛЬТРУЕМ ВСТРОЙКИ
+            filtered_gpus = []
+            integrated_keywords = ['Intel', 'UHD', 'HD Graphics', 'Iris', 'Radeon Graphics', 'AMD Radeon']
+            
+            for gpu in gpus:
+                gpu_name = ""
+                if hasattr(gpu, 'name'):
+                    gpu_name = gpu.name
+                elif isinstance(gpu, dict):
+                    gpu_name = gpu.get('name', '')
+                
+                # Пропускаем встройки
+                if any(keyword in gpu_name for keyword in integrated_keywords):
+                    print(f"Пропускаем встройку: {gpu_name}")
+                    continue
+                
+                filtered_gpus.append(gpu)
+        
+            gpus = filtered_gpus  # Заменяем на отфильтрованный список
+            
             # Проверяем, есть ли данные
             if not gpus or (isinstance(gpus, list) and len(gpus) == 0):
                 if hasattr(self, '_gpu_detected') and self._gpu_detected:
