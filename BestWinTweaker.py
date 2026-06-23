@@ -11,6 +11,11 @@ import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 
+# ПАТЧ ДОЛЖЕН БЫТЬ ПРИМЕНЕН ДО ИМПОРТА GPUtil!
+import patch_subprocess  # <-- ПЕРВЫМ ИМПОРТОМ
+# Импортируем GPUtil после патча
+import GPUtil
+
 from utilities import no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, get_windows_version, start_download
 from uwpremover import *
 from TweakerTools import *
@@ -19,35 +24,7 @@ from TweakerTools import *
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-VERSION = "1.9.2"
-
-# Для скрытого опроса видеокарты
-import subprocess
-import os
-
-# Модифицируем subprocess.Popen глобально для всего приложения
-_original_popen = subprocess.Popen
-
-
-def _silent_popen(*args, **kwargs):
-    """Глобально скрываем все консольные окна"""
-    # Настройки для скрытия окон
-    if 'startupinfo' not in kwargs:
-        kwargs['startupinfo'] = subprocess.STARTUPINFO()
-        kwargs['startupinfo'].dwFlags = subprocess.STARTF_USESHOWWINDOW
-        kwargs['startupinfo'].wShowWindow = subprocess.SW_HIDE
-
-    kwargs['creationflags'] = kwargs.get('creationflags', 0) | subprocess.CREATE_NO_WINDOW
-    kwargs['stdin'] = subprocess.DEVNULL
-
-    return _original_popen(*args, **kwargs)
-
-
-# Применяем патч глобально
-subprocess.Popen = _silent_popen
-
-# Импортируем GPUtil после патча
-import GPUtil
+VERSION = "1.9.4"
 
 
 class BestWinTweaker:
