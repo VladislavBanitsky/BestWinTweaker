@@ -84,7 +84,7 @@ class SplashScreen:
         # Версия
         tk.Label(
             main_frame,
-            text="BestWinTweaker 1.9.4",
+            text="BestWinTweaker 1.9.5",
             font=('Segoe UI', 8),
             fg='#666666',
             bg='#1a1a2e'

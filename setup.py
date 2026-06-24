@@ -17,8 +17,8 @@ def create_version_file():
 VSVersionInfo(
   ffi=FixedFileInfo(
     # filevers and prodvers should be a tuple of integers (major, minor, build, private)
-    filevers=(1, 9, 4, 0),
-    prodvers=(1, 9, 4, 0),
+    filevers=(1, 9, 5, 0),
+    prodvers=(1, 9, 5, 0),
     # Contains a bitmask that specifies the valid bits 'flags'
     mask=0x3f,
     # Contains a bitmask that specifies the Boolean attributes of the file.
@@ -39,12 +39,12 @@ VSVersionInfo(
         u'040904B0',
         [StringStruct(u'CompanyName', u'BestWinTweaker'),
         StringStruct(u'FileDescription', u'BestWinTweaker - Системный монитор и оптимизатор'),
-        StringStruct(u'FileVersion', u'1.9.4.0'),
+        StringStruct(u'FileVersion', u'1.9.5.0'),
         StringStruct(u'InternalName', u'BestWinTweaker'),
         StringStruct(u'LegalCopyright', u'Copyright © 2026'),
         StringStruct(u'OriginalFilename', u'BestWinTweaker.exe'),
         StringStruct(u'ProductName', u'BestWinTweaker'),
-        StringStruct(u'ProductVersion', u'1.9.4.0')])
+        StringStruct(u'ProductVersion', u'1.9.5.0')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]
