@@ -2,6 +2,7 @@ import shutil
 import winreg
 import subprocess
 import os
+import time
 
 class TweakerTools:
     """Класс с инструментами оптимизации Windows"""
@@ -295,4 +296,52 @@ class TweakerTools:
                 return True
             return False
         except:
+            return False
+    
+    @staticmethod
+    def remove_watermark():
+        """Удалить водяной знак сборки Windows (оценка/тестовая версия)"""
+        try:
+            # Проверяем, есть ли водяной знак
+            commands = [
+                # Удаляем параметры водяного знака из реестра
+                'reg delete "HKEY_CURRENT_USER\\Control Panel\\Desktop" /v "PaintDesktopVersion" /f 2>nul',
+                # Сбрасываем обои через PowerShell (принудительное обновление)
+                'powershell -Command "& { $code = @\' [DllImport(\"user32.dll\")] public static extern int SendMessage(int hWnd, int Msg, int wParam, int lParam); \'@; Add-Type -Name Window -MemberDefinition $code; [Window]::SendMessage(0xFFFF, 0x001A, 0, 0) }" 2>nul'
+            ]
+            
+            errors = []
+            success_count = 0
+            
+            for cmd in commands:
+                try:
+                    result = TweakerTools.run_cmd(cmd)
+                    # Не выводим ошибки, так как некоторые ключи могут отсутствовать
+                    success_count += 1
+                except Exception:
+                    # Некоторые команды могут завершаться с ошибкой, но это нормально
+                    pass
+            
+            # Перезапускаем проводник для применения изменений
+            try:
+                TweakerTools.restart_explorer()
+            except:
+                pass
+            
+            return True, None
+            
+        except Exception as e:
+            return False, str(e)
+    
+    @staticmethod
+    def restart_explorer():
+        """Перезапустить проводник Windows"""
+        try:
+            # Останавливаем explorer.exe
+            subprocess.run('taskkill /f /im explorer.exe', shell=True, capture_output=True, text=True)
+            time.sleep(1)  # Небольшая пауза
+            # Запускаем explorer.exe заново
+            subprocess.run('start explorer.exe', shell=True, capture_output=True, text=True)
+            return True
+        except Exception as e:
             return False

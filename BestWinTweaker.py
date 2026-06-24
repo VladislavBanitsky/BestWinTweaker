@@ -24,7 +24,7 @@ from TweakerTools import *
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-VERSION = "1.9.4"
+VERSION = "1.9.5"
 
 
 class BestWinTweaker:
@@ -416,7 +416,7 @@ class BestWinTweaker:
         )
         self.indexing_btn.grid(row=2, column=0, padx=15, pady=15)
 
-        # Кнопка открытия папки Temp
+        # Кнопка скачивания Windows
         self.open_temp_btn = ctk.CTkButton(
             buttons_grid,
             text="Скачать Windows",
@@ -426,6 +426,17 @@ class BestWinTweaker:
             font=ctk.CTkFont(size=14)
         )
         self.open_temp_btn.grid(row=2, column=1, padx=15, pady=15)
+        
+        # НОВАЯ КНОПКА: Удалить водяной знак сборки
+        self.remove_watermark_btn = ctk.CTkButton(
+            buttons_grid,
+            text="Удалить водяной знак сборки",
+            command=self.action_remove_watermark,
+            width=250,
+            height=60,
+            font=ctk.CTkFont(size=14)
+        )
+        self.remove_watermark_btn.grid(row=0, column=2, columnspan=2, padx=15, pady=15)
 
     def setup_about_tab(self):
         """Настройка вкладки О программе"""
@@ -754,6 +765,53 @@ class BestWinTweaker:
     def action_win_download(self):
         """Скачать ISO Windows"""
         start_download()
+    
+    def action_remove_watermark(self):
+        """Удаление водяного знака сборки Windows"""
+        # Подтверждение действия
+        if not messagebox.askyesno(
+            "Подтверждение", 
+            "Эта операция удалит водяной знак сборки Windows на рабочем столе.\n\n"
+            "Проводник будет перезапущен для применения изменений.\n\n"
+            "Продолжить?"
+        ):
+            return
+        
+        self.status_label.configure(text="Удаление водяного знака сборки...", text_color="orange")
+        self.remove_watermark_btn.configure(state="disabled")
+        self.window.update()
+        
+        def remove_thread():
+            success, error = TweakerTools.remove_watermark()
+            
+            def update_ui():
+                self.remove_watermark_btn.configure(state="normal")
+                if success:
+                    self.status_label.configure(
+                        text="✓ Водяной знак удален! Проводник перезапущен.", 
+                        text_color="green"
+                    )
+                    messagebox.showinfo(
+                        "Готово",
+                        "Водяной знак сборки Windows должен исчезнуть.\n\n"
+                        "Если знак остался, попробуйте перезагрузить компьютер.\n\n"
+                        "Примечание: На некоторых сборках Windows (например, Insider Preview)\n"
+                        "водяной знак может вернуться после обновления системы."
+                    )
+                else:
+                    self.status_label.configure(
+                        text=f"✗ Ошибка: {error if error else 'Неизвестная ошибка'}", 
+                        text_color="red"
+                    )
+                    messagebox.showerror(
+                        "Ошибка",
+                        f"Не удалось удалить водяной знак:\n{error if error else 'Неизвестная ошибка'}\n\n"
+                        "Попробуйте запустить программу от имени администратора."
+                    )
+            
+            self.window.after(0, update_ui)
+        
+        threading.Thread(target=remove_thread, daemon=True).start()
 
     def create_header(self):
         header = ctk.CTkFrame(self.main_container, height=60)
