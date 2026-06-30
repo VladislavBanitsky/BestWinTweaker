@@ -13,7 +13,7 @@ import customtkinter as ctk
 
 from tkinter import *
 from ctypes import windll
-from BlurWindow.blurWindow import blur
+from BlurWindow.blurWindow import GlobalBlur
 
 # ПАТЧ ДОЛЖЕН БЫТЬ ПРИМЕНЕН ДО ИМПОРТА GPUtil!
 import patch_subprocess  # <-- ПЕРВЫМ ИМПОРТОМ
@@ -28,7 +28,7 @@ from TweakerTools import *
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-VERSION = "1.9.5"
+VERSION = "1.9.6"
 
 
 class BestWinTweaker:
@@ -41,12 +41,9 @@ class BestWinTweaker:
         self.window.geometry("1400x750")
         self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
         
-        # Добавляем размытие сразу при создании
-        try:
-            from ctypes import windll
-            self.window.after(100, lambda: self.apply_blur())
-        except:
-            pass
+        from ctypes import windll
+        hWnd = windll.user32.FindWindowW(None, self.window.title())
+        GlobalBlur(hWnd, Acrylic=True)
         
         # Переменные для обновления
         self.running = True
@@ -72,18 +69,6 @@ class BestWinTweaker:
         self.setup_ui()
         self.apply_preloaded_data()  # Применяем предзагруженные данные
         self.start_updates()
-
-    
-    def apply_blur(self):
-        """Применяет эффект размытия к окну"""
-        try:
-            from ctypes import windll
-            hWnd = windll.user32.FindWindowW(None, self.window.title())
-            if hWnd:
-                from BlurWindow.blurWindow import blur
-                blur(hWnd)
-        except Exception as e:
-            print(f"Ошибка применения размытия: {e}")
     
     def apply_preloaded_data(self):
         """Применяет данные, загруженные во время заставки"""
@@ -874,14 +859,10 @@ class BestWinTweaker:
         if current_theme == "Dark":
             ctk.set_appearance_mode("Light")
             self.theme_switch.configure(text="Светло")
-            self.transparent_color = '#f0f0f0'
         else:
             ctk.set_appearance_mode("Dark")
             self.theme_switch.configure(text="Темно")
             self.transparent_color = '#1a1a1a'
-        
-        # Применяем размытие в несколько этапов
-        self.window.after(1000, lambda: self.apply_blur())
     
     def create_cpu_section(self, parent):
         cpu_frame = ctk.CTkFrame(parent)
