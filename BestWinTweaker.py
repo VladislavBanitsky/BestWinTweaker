@@ -3,7 +3,7 @@ import platform
 import datetime
 import threading
 import time
-from PIL import Image
+from PIL import Image as PILImage
 import cpuinfo
 import json
 import re
@@ -28,7 +28,7 @@ from TweakerTools import *
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-VERSION = "1.9.6"
+VERSION = "1.9.5"
 
 
 class BestWinTweaker:
@@ -478,9 +478,10 @@ class BestWinTweaker:
         logo_frame.pack(pady=0)
 
         try:
-            logo_img = Image.open(resource_path('./resources/images/BestWinTweaker.png'))
+            logo_path = resource_path('./resources/images/BestWinTweaker.png')
+            logo_img = PILImage.open(resource_path('./resources/images/BestWinTweaker.png'))
             desired_size = (256, 256)
-            logo_img = logo_img.resize(desired_size, Image.Resampling.LANCZOS)
+            logo_img = logo_img.resize(desired_size, PILImage.Resampling.LANCZOS)
             logo_photo = ctk.CTkImage(light_image=logo_img, dark_image=logo_img, size=desired_size)
             logo_label = ctk.CTkLabel(logo_frame, image=logo_photo, text="")
             logo_label.image = logo_photo
