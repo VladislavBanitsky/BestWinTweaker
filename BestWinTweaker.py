@@ -41,9 +41,10 @@ class BestWinTweaker:
         self.window.geometry("1400x750")
         self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
         
-        from ctypes import windll
-        hWnd = windll.user32.FindWindowW(None, self.window.title())
-        GlobalBlur(hWnd, Acrylic=True)
+        if get_windows_version() != "7":  # в Windows 7 слишком сильная прозрачность, поэтому не включаем
+            from ctypes import windll
+            hWnd = windll.user32.FindWindowW(None, self.window.title())
+            GlobalBlur(hWnd, Acrylic=True)
         
         # Переменные для обновления
         self.running = True
