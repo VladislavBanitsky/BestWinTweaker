@@ -6,7 +6,27 @@ import time
 
 class TweakerTools:
     """Класс с инструментами оптимизации Windows"""
-
+    
+    @staticmethod
+    def set_bing_wallpaper(resolution="UHD", mkt="ru-RU", index=0):
+        try:
+            # Импортируем BingWallpaper здесь, чтобы избежать циклических импортов
+            from bing_wallpaper import BingWallpaper
+            
+            # Папка для сохранения обоев (можно настроить)
+            save_folder = os.path.join(os.path.expanduser("~"), "Pictures", "BingWallpapers")
+            
+            success, message = BingWallpaper.fetch_and_set_wallpaper(
+                resolution=resolution,
+                mkt=mkt,
+                index=index,
+                save_path=save_folder
+            )
+            
+            return success, message
+        except Exception as e:
+            return False, f"Ошибка при установке обоев Bing: {str(e)}"
+    
     @staticmethod
     def run_cmd(cmd):
         """Выполнить командную строку и вернуть результат"""

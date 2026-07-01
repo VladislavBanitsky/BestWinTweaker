@@ -22,13 +22,13 @@ import GPUtil
 
 from utilities import no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, get_windows_version, start_download
 from uwpremover import *
-from TweakerTools import *
+from TweakerTools import TweakerTools
 
 # Настройка внешнего вида customtkinter
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-VERSION = "1.9.6"
+VERSION = "1.9.7"
 
 
 class BestWinTweaker:
@@ -436,7 +436,17 @@ class BestWinTweaker:
         )
         self.open_temp_btn.grid(row=2, column=1, padx=15, pady=15)
         
-        # НОВАЯ КНОПКА: Удалить водяной знак сборки
+        # Новая кнопка для установки обоев Bing
+        self.bing_btn = ctk.CTkButton(
+            buttons_grid,
+            text="Установить обои Bing",
+            command=self.action_set_bing_wallpaper,
+            width=250,
+            height=60,
+            font=ctk.CTkFont(size=14)
+        )
+        self.bing_btn.grid(row=0, column=2, columnspan=2, padx=15, pady=15)
+        
         self.remove_watermark_btn = ctk.CTkButton(
             buttons_grid,
             text="Удалить водяной знак сборки",
@@ -445,8 +455,37 @@ class BestWinTweaker:
             height=60,
             font=ctk.CTkFont(size=14)
         )
-        self.remove_watermark_btn.grid(row=0, column=2, columnspan=2, padx=15, pady=15)
+        self.remove_watermark_btn.grid(row=1, column=2, columnspan=2, padx=15, pady=15)
+    
+    def action_set_bing_wallpaper(self):
+        """Действие по установке обоев с Bing"""
+        # Блокируем кнопку, чтобы не было множественных нажатий
+        self.bing_btn.configure(state="disabled")
+        self.status_label.configure(text="Загрузка и установка обоев Bing...", text_color="orange")
+        self.window.update()
 
+        def set_wallpaper_thread():
+            # Можно добавить выбор разрешения, но для простоты оставим UHD
+            success, message = TweakerTools.set_bing_wallpaper(
+                resolution="UHD", 
+                mkt="ru-RU", 
+                index=0
+            )
+            
+            def update_ui():
+                self.bing_btn.configure(state="normal")
+                if success:
+                    self.status_label.configure(text=message, text_color="green")
+                    messagebox.showinfo("Успех", message)
+                else:
+                    self.status_label.configure(text="Ошибка при установке обоев", text_color="red")
+                    messagebox.showerror("Ошибка", message)
+            
+            self.window.after(0, update_ui)
+
+        # Запускаем в отдельном потоке, чтобы не блокировать интерфейс
+        threading.Thread(target=set_wallpaper_thread, daemon=True).start()
+    
     def setup_about_tab(self):
         """Настройка вкладки О программе"""
         # Заголовок
