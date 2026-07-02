@@ -5,6 +5,8 @@ import tempfile
 import traceback
 from pathlib import Path
 from datetime import datetime
+from tkinter import messagebox
+
 from utilities import get_windows_version
 
 class BingWallpaper:
@@ -132,14 +134,14 @@ class BingWallpaper:
                     import subprocess
                     cmd = f"REG ADD \"HKCU\\Control Panel\\Desktop\" /v WallPaper /t REG_SZ /d \"{file_path}\""
                     # Выполняем команду
-                    subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True, encoding='cp866')
+                    subprocess.run(f"echo y | {cmd}", shell=True, capture_output=True, text=True, check=True, encoding='cp866')
                     messagebox.showinfo("Успех", "Обои были установлены через реестр, перезагрузите компьютер...")            
                     return True
                 except Exception as e:
                     print(f"Ошибка при установке обоев через реестр: {e}")
                     traceback.print_exc()
                     return False
-            else:
+            else:  # для более свежых систем используем Windows API
                 # Используем ctypes для вызова Windows API
                 # SPI_SETDESKWALLPAPER = 0x0014 (20)
                 # SPIF_UPDATEINIFILE = 0x01
