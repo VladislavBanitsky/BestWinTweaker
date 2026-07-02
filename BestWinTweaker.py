@@ -476,10 +476,8 @@ class BestWinTweaker:
                 self.bing_btn.configure(state="normal")
                 if success:
                     self.status_label.configure(text=message, text_color="green")
-                    messagebox.showinfo("Успех", message)
                 else:
-                    self.status_label.configure(text="Ошибка при установке обоев", text_color="red")
-                    messagebox.showerror("Ошибка", message)
+                    self.status_label.configure(text=message, text_color="red")
             
             self.window.after(0, update_ui)
 

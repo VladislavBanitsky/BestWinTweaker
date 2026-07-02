@@ -5,6 +5,7 @@ import tempfile
 import traceback
 from pathlib import Path
 from datetime import datetime
+from utilities import get_windows_version
 
 class BingWallpaper:
     """Класс для работы с Bing Wallpaper API"""
@@ -126,18 +127,31 @@ class BingWallpaper:
                 print(f"Файл не найден: {file_path}")
                 return False
             
-            # Используем ctypes для вызова Windows API
-            # SPI_SETDESKWALLPAPER = 0x0014 (20)
-            # SPIF_UPDATEINIFILE = 0x01
-            # SPIF_SENDWININICHANGE = 0x02
-            result = ctypes.windll.user32.SystemParametersInfoW(20, 0, file_path, 3)
-            
-            if result:
-                print(f"Обои успешно установлены: {file_path}")
+            if get_windows_version()=="7":  # для Windows 7 надёжнее через реестр
+                try:
+                    import subprocess
+                    cmd = f"REG ADD \"HKCU\\Control Panel\\Desktop\" /v WallPaper /t REG_SZ /d \"{file_path}\""
+                    # Выполняем команду
+                    subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True, encoding='cp866')
+                    messagebox.showinfo("Успех", "Обои были установлены через реестр, перезагрузите компьютер...")            
+                    return True
+                except Exception as e:
+                    print(f"Ошибка при установке обоев через реестр: {e}")
+                    traceback.print_exc()
+                    return False
             else:
-                print("Не удалось установить обои.")
+                # Используем ctypes для вызова Windows API
+                # SPI_SETDESKWALLPAPER = 0x0014 (20)
+                # SPIF_UPDATEINIFILE = 0x01
+                # SPIF_SENDWININICHANGE = 0x02
+                result = ctypes.windll.user32.SystemParametersInfoW(20, 0, file_path, 3)
                 
-            return bool(result)
+                if result:
+                    print(f"Обои успешно установлены: {file_path}")
+                else:
+                    print("Не удалось установить обои.")
+                    
+                return bool(result)
             
         except Exception as e:
             print(f"Ошибка при установке обоев: {e}")
