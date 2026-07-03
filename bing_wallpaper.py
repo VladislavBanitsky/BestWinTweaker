@@ -6,6 +6,7 @@ import traceback
 from pathlib import Path
 from datetime import datetime
 from tkinter import messagebox
+from PIL import Image as PImage # Импортируем модуль для работы с графикой
 
 from utilities import get_windows_version
 
@@ -13,6 +14,27 @@ class BingWallpaper:
     """Класс для работы с Bing Wallpaper API"""
     
     API_URL = "https://bing.biturl.top/"
+    
+    @staticmethod
+    def convert_to_bmp(input_path):
+        """Конвертирует изображение в формат BMP."""
+        try:
+            # Открываем исходное изображение (jpg, png, webp и т.д.)
+            with PImage.open(input_path) as img:
+                # Формируем новый путь с расширением .bmp
+                base_path, _ = os.path.splitext(input_path)
+                bmp_path = base_path + ".bmp"
+
+                # Конвертируем в RGB (важно для PNG с прозрачностью, иначе выдаст ошибку)
+                rgb_img = img.convert("RGB")
+
+                # Сохраняем в формате BMP
+                rgb_img.save(bmp_path, "BMP")
+                print(f"Файл успешно конвертирован в BMP: {bmp_path}")
+                return bmp_path
+        except Exception as e:
+            print(f"Ошибка при конвертации: {e}")
+            return None
     
     @staticmethod
     def get_wallpaper_info(resolution="UHD", mkt="ru-RU", index=0):
@@ -128,32 +150,22 @@ class BingWallpaper:
             if not os.path.exists(file_path):
                 print(f"Файл не найден: {file_path}")
                 return False
+
+            # Конвертируем в BMP (для стабильности в Windows 7)
+            file_path = BingWallpaper.convert_to_bmp(file_path)
             
-            if get_windows_version()=="7":  # для Windows 7 надёжнее через реестр
-                try:
-                    import subprocess
-                    cmd = f"REG ADD \"HKCU\\Control Panel\\Desktop\" /v WallPaper /t REG_SZ /d \"{file_path}\""
-                    # Выполняем команду
-                    subprocess.run(f"echo y | {cmd}", shell=True, capture_output=True, text=True, check=True, encoding='cp866')
-                    messagebox.showinfo("Успех", "Обои были установлены через реестр, перезагрузите компьютер...")            
-                    return True
-                except Exception as e:
-                    print(f"Ошибка при установке обоев через реестр: {e}")
-                    traceback.print_exc()
-                    return False
-            else:  # для более свежых систем используем Windows API
-                # Используем ctypes для вызова Windows API
-                # SPI_SETDESKWALLPAPER = 0x0014 (20)
-                # SPIF_UPDATEINIFILE = 0x01
-                # SPIF_SENDWININICHANGE = 0x02
-                result = ctypes.windll.user32.SystemParametersInfoW(20, 0, file_path, 3)
+            # Используем ctypes для вызова Windows API
+            # SPI_SETDESKWALLPAPER = 0x0014 (20)
+            # SPIF_UPDATEINIFILE = 0x01
+            # SPIF_SENDWININICHANGE = 0x02
+            result = ctypes.windll.user32.SystemParametersInfoW(20, 0, file_path, 3)
+            
+            if result:
+                print(f"Обои успешно установлены: {file_path}")
+            else:
+                print("Не удалось установить обои.")
                 
-                if result:
-                    print(f"Обои успешно установлены: {file_path}")
-                else:
-                    print("Не удалось установить обои.")
-                    
-                return bool(result)
+            return bool(result)
             
         except Exception as e:
             print(f"Ошибка при установке обоев: {e}")
