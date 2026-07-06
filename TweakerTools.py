@@ -3,6 +3,9 @@ import winreg
 import subprocess
 import os
 import time
+import requests
+import tempfile
+import zipfile
 
 class TweakerTools:
     """Класс с инструментами оптимизации Windows"""
@@ -320,27 +323,63 @@ class TweakerTools:
     
     @staticmethod
     def remove_watermark():
-        """Удалить водяной знак сборки Windows (оценка/тестовая версия)"""
+        """Удалить водяной знак сборки Windows с помощью Universal Watermark Remover"""
         try:
-            # Проверяем, есть ли водяной знак
-            commands = [
-                # Удаляем параметры водяного знака из реестра
-                'reg delete "HKEY_CURRENT_USER\\Control Panel\\Desktop" /v "PaintDesktopVersion" /f 2>nul',
-                # Сбрасываем обои через PowerShell (принудительное обновление)
-                'powershell -Command "& { $code = @\' [DllImport(\"user32.dll\")] public static extern int SendMessage(int hWnd, int Msg, int wParam, int lParam); \'@; Add-Type -Name Window -MemberDefinition $code; [Window]::SendMessage(0xFFFF, 0x001A, 0, 0) }" 2>nul'
-            ]
+            # URL для скачивания Universal Watermark Remover
+            uwd_url = "https://github.com/pr701/universal-watermark-disabler/releases/download/v1.0.0.6-2015/uwd.zip"
             
-            errors = []
-            success_count = 0
+            # Создаем временную папку
+            temp_dir = tempfile.mkdtemp()
+            zip_path = os.path.join(temp_dir, "UWD.zip")
+            extract_path = os.path.join(temp_dir, "UWD")
             
-            for cmd in commands:
-                try:
-                    result = TweakerTools.run_cmd(cmd)
-                    # Не выводим ошибки, так как некоторые ключи могут отсутствовать
-                    success_count += 1
-                except Exception:
-                    # Некоторые команды могут завершаться с ошибкой, но это нормально
-                    pass
+            # Скачиваем архив
+            print("Скачивание Universal Watermark Remover...")
+            response = requests.get(uwd_url, timeout=30)
+            response.raise_for_status()
+            
+            with open(zip_path, 'wb') as f:
+                f.write(response.content)
+            
+            # Распаковываем архив
+            print("Распаковка...")
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_path)
+            
+            # Ищем исполняемый файл
+            exe_path = None
+            for root, dirs, files in os.walk(extract_path):
+                for file in files:
+                    if file.lower() == "uwd.exe" or file.lower() == "universalwatermarkremover.exe":
+                        exe_path = os.path.join(root, file)
+                        break
+                if exe_path:
+                    break
+            
+            if not exe_path:
+                # Пробуем найти любой .exe файл
+                for root, dirs, files in os.walk(extract_path):
+                    for file in files:
+                        if file.lower().endswith(".exe"):
+                            exe_path = os.path.join(root, file)
+                            break
+                    if exe_path:
+                        break
+            
+            if not exe_path:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return False, "Не найден исполняемый файл Universal Watermark Remover"
+            
+            # Запускаем UWD с параметрами для удаления водяного знака
+            print(f"Запуск UWD: {exe_path}")
+            
+            result = subprocess.run(
+                [exe_path],
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
             
             # Перезапускаем проводник для применения изменений
             try:
@@ -348,10 +387,24 @@ class TweakerTools:
             except:
                 pass
             
-            return True, None
+            # Очищаем временные файлы
+            shutil.rmtree(temp_dir, ignore_errors=True)
             
+            # Проверяем успешность
+            if result.returncode == 0:
+                return True, None
+            else:
+                # Если UWD не сработал, возвращаем ошибку
+                return False, result
+            
+        except requests.exceptions.RequestException as e:
+            return False, f"Ошибка загрузки UWD: {str(e)}"
+        except zipfile.BadZipFile:
+            return False, "Ошибка распаковки UWD: файл поврежден"
+        except subprocess.TimeoutExpired:
+            return False, "Время выполнения UWD истекло"
         except Exception as e:
-            return False, str(e)
+                return False, f"Ошибка: {str(e)}"
     
     @staticmethod
     def restart_explorer():
