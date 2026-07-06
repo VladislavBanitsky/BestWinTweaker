@@ -1,12 +1,20 @@
 import PyInstaller.__main__
 import os
 
+from version import VERSION
+
 # Название приложения
 APP_NAME = "BestWinTweaker"
 
 # Пути
 SCRIPT_PATH = "start_app.py"
 ICON_PATH = "./resources/images/BestWinTweaker.ico"
+
+# Разбиваем версию на компоненты
+version_parts = VERSION.split('.')
+major, minor, patch = version_parts[0], version_parts[1], version_parts[2]
+# Если есть четвертая часть (build), добавляем, иначе 0
+build = version_parts[3] if len(version_parts) > 3 else "0"
 
 # Создаем файл версии
 def create_version_file():
@@ -17,8 +25,8 @@ def create_version_file():
 VSVersionInfo(
   ffi=FixedFileInfo(
     # filevers and prodvers should be a tuple of integers (major, minor, build, private)
-    filevers=(1, 9, 7, 0),
-    prodvers=(1, 9, 7, 0),
+    filevers=({major}, {minor}, {patch}, {build}),
+    prodvers=({major}, {minor}, {patch}, {build}),
     # Contains a bitmask that specifies the valid bits 'flags'
     mask=0x3f,
     # Contains a bitmask that specifies the Boolean attributes of the file.
@@ -39,12 +47,12 @@ VSVersionInfo(
         u'040904B0',
         [StringStruct(u'CompanyName', u'BestWinTweaker'),
         StringStruct(u'FileDescription', u'BestWinTweaker - Системный монитор и оптимизатор'),
-        StringStruct(u'FileVersion', u'1.9.7.0'),
+        StringStruct(u'FileVersion', u'{VERSION}.{build}'),
         StringStruct(u'InternalName', u'BestWinTweaker'),
         StringStruct(u'LegalCopyright', u'Copyright © 2026'),
         StringStruct(u'OriginalFilename', u'BestWinTweaker.exe'),
         StringStruct(u'ProductName', u'BestWinTweaker'),
-        StringStruct(u'ProductVersion', u'1.9.7.0')])
+        StringStruct(u'ProductVersion', u'{VERSION}.{build}')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]

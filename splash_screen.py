@@ -4,6 +4,8 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 import threading
 
+from version import VERSION
+
 class SplashScreen:
     """Заставка с поддержкой фоновой загрузки данных"""
     
@@ -84,7 +86,7 @@ class SplashScreen:
         # Версия
         tk.Label(
             main_frame,
-            text="BestWinTweaker 1.9.7",
+            text=f"BestWinTweaker {VERSION}",
             font=('Segoe UI', 8),
             fg='#666666',
             bg='#1a1a2e'

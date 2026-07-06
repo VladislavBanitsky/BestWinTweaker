@@ -28,7 +28,7 @@ from TweakerTools import TweakerTools
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-VERSION = "1.9.7"
+from version import VERSION
 
 
 class BestWinTweaker:
