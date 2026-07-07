@@ -456,6 +456,16 @@ class BestWinTweaker:
             font=ctk.CTkFont(size=14)
         )
         self.remove_watermark_btn.grid(row=1, column=2, columnspan=2, padx=15, pady=15)
+        
+        self.ping_btn = ctk.CTkButton(
+            buttons_grid,
+            text="Проверить пинг",
+            command=self.action_ping,
+            width=250,
+            height=60,
+            font=ctk.CTkFont(size=14)
+        )
+        self.ping_btn.grid(row=2, column=2, padx=15, pady=15)
     
     def action_set_bing_wallpaper(self):
         """Действие по установке обоев с Bing"""
@@ -483,6 +493,192 @@ class BestWinTweaker:
 
         # Запускаем в отдельном потоке, чтобы не блокировать интерфейс
         threading.Thread(target=set_wallpaper_thread, daemon=True).start()
+    
+    
+    def action_ping(self):
+        """Открыть окно для проверки пинга"""
+        ping_window = ctk.CTkToplevel(self.window)
+        ping_window.after(200, lambda: ping_window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico')))
+        ping_window.title("Проверка пинга")
+        ping_window.geometry("600x500")
+        ping_window.resizable(False, False)
+        
+        
+        # Центрируем окно
+        ping_window.transient(self.window)
+        ping_window.grab_set()
+        
+        # Основной контейнер
+        main_frame = ctk.CTkFrame(ping_window)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Заголовок
+        title_label = ctk.CTkLabel(
+            main_frame,
+            text="Проверка доступности узла",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        title_label.pack(pady=(0, 15))
+        
+        # Поле для ввода IP
+        input_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        input_frame.pack(fill="x", pady=(0, 10))
+        
+        ip_label = ctk.CTkLabel(
+            input_frame,
+            text="IP-адрес или домен:",
+            font=ctk.CTkFont(size=14)
+        )
+        ip_label.pack(side="left", padx=(0, 10))
+        
+        ip_entry = ctk.CTkEntry(
+            input_frame,
+            placeholder_text="Например: 8.8.8.8 или google.com",
+            width=300,
+            font=ctk.CTkFont(size=14)
+        )
+        ip_entry.pack(side="left", fill="x", expand=True)
+        ip_entry.insert(0, "8.8.8.8")
+        
+        # Кнопка запуска
+        ping_button = ctk.CTkButton(
+            main_frame,
+            text="Проверить пинг",
+            command=lambda: self._run_ping(ip_entry.get(), ping_button, output_text, result_label),
+            width=200,
+            height=40,
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        ping_button.pack(pady=10)
+        
+        # Разделитель
+        separator = ctk.CTkFrame(main_frame, height=2, fg_color="gray")
+        separator.pack(fill="x", pady=10)
+        
+        # Результат
+        result_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        result_frame.pack(fill="both", expand=True)
+        
+        # Метка для краткого результата
+        result_label = ctk.CTkLabel(
+            result_frame,
+            text="Введите IP-адрес и нажмите 'Проверить пинг'",
+            font=ctk.CTkFont(size=14),
+            text_color="gray"
+        )
+        result_label.pack(pady=(0, 5))
+        
+        # Текстовое поле для вывода пинга
+        output_text = ctk.CTkTextbox(
+            result_frame,
+            font=ctk.CTkFont(size=12),
+            height=250
+        )
+        output_text.pack(fill="both", expand=True)
+        output_text.configure(state="disabled")
+        
+        # Фокус на поле ввода
+        ip_entry.focus()
+        ip_entry.select_range(0, 'end')
+    
+    def _run_ping(self, ip, ping_button, output_text, result_label):
+        """Выполнить пинг в отдельном потоке"""
+        if not ip or ip.strip() == "":
+            result_label.configure(text="Введите IP-адрес или домен!", text_color="red")
+            return
+        
+        # Блокируем кнопку
+        ping_button.configure(state="disabled", text="Проверка...")
+        result_label.configure(text="Проверка доступности...", text_color="orange")
+        
+        # Очищаем вывод
+        output_text.configure(state="normal")
+        output_text.delete("1.0", "end")
+        output_text.configure(state="disabled")
+        
+        def ping_thread():
+            import subprocess
+            import re
+            import socket
+            
+            target = ip.strip()
+            result_lines = []
+            hostname = None
+            is_reachable = False
+            response_time = None
+            
+            try:
+                # Попытка получить имя хоста
+                try:
+                    hostname = socket.gethostbyaddr(target)[0]
+                except socket.herror:
+                    try:
+                        hostname = socket.gethostbyname(target)
+                    except:
+                        hostname = None
+                
+                # Выполняем пинг
+                cmd = f'ping -n 4 {target}'
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    encoding='cp866',
+                    timeout=10
+                )
+                
+                output = result.stdout
+                result_lines.append("=== РЕЗУЛЬТАТ ПИНГА ===")
+                result_lines.append("")
+                
+                # Разбираем вывод
+                for line in output.split('\n'):
+                    if line.strip():
+                        result_lines.append(line)
+                        # Ищем время ответа
+                        time_match = re.search(r'время[=<](\d+)[мс]', line)
+                        if time_match:
+                            response_time = time_match.group(1)
+                            is_reachable = True
+                
+                # Если пинг прошел, добавляем информацию об узле
+                if is_reachable:
+                    result_lines.insert(1, f"Узел: {hostname if hostname else target}")
+                    result_lines.insert(2, f"Статус: ДОСТУПЕН")
+                    result_lines.insert(3, f"Время ответа: ~{response_time} мс")
+                    result_lines.insert(4, "")
+                else:
+                    result_lines.insert(1, f"Узел: {hostname if hostname else target}")
+                    result_lines.insert(2, f"Статус: НЕ ДОСТУПЕН")
+                    result_lines.insert(3, "")
+                
+            except subprocess.TimeoutExpired:
+                result_lines.append("Превышено время ожидания ответа")
+            except Exception as e:
+                result_lines.append(f"Ошибка: {str(e)}")
+            
+            # Обновляем UI в главном потоке
+            def update_ui():
+                output_text.configure(state="normal")
+                output_text.delete("1.0", "end")
+                output_text.insert("1.0", "\n".join(result_lines))
+                output_text.configure(state="disabled")
+                
+                # Обновляем статус
+                if is_reachable:
+                    host_info = f"Узел {hostname if hostname else target} доступен (время ответа: ~{response_time} мс)"
+                    result_label.configure(text=host_info, text_color="green")
+                else:
+                    host_info = f"Узел {hostname if hostname else target} не доступен"
+                    result_label.configure(text=host_info, text_color="red")
+                
+                ping_button.configure(state="normal", text="Проверить пинг")
+            
+            self.window.after(0, update_ui)
+        
+        threading.Thread(target=ping_thread, daemon=True).start()
+    
     
     def setup_about_tab(self):
         """Настройка вкладки О программе"""
