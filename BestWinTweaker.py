@@ -12,15 +12,13 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from tkinter import *
-from ctypes import windll
-from BlurWindow.blurWindow import GlobalBlur
 
 # ПАТЧ ДОЛЖЕН БЫТЬ ПРИМЕНЕН ДО ИМПОРТА GPUtil!
 import patch_subprocess  # <-- ПЕРВЫМ ИМПОРТОМ
 # Импортируем GPUtil после патча
 import GPUtil
 
-from utilities import no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, get_windows_version, start_download
+from utilities import blur_window, no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, start_download
 from uwpremover import *
 from TweakerTools import TweakerTools
 
@@ -41,10 +39,7 @@ class BestWinTweaker:
         self.window.geometry("1400x750")
         self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
         
-        if get_windows_version() != "7":  # в Windows 7 слишком сильная прозрачность, поэтому не включаем
-            from ctypes import windll
-            hWnd = windll.user32.FindWindowW(None, self.window.title())
-            GlobalBlur(hWnd, Acrylic=True)
+        blur_window(self.window)
         
         # Переменные для обновления
         self.running = True
@@ -499,9 +494,11 @@ class BestWinTweaker:
         """Открыть окно для проверки пинга"""
         ping_window = ctk.CTkToplevel(self.window)
         ping_window.after(200, lambda: ping_window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico')))
+        ping_window.after(200, lambda: blur_window(ping_window))
         ping_window.title("Проверка пинга")
         ping_window.geometry("600x500")
         ping_window.resizable(False, False)
+
         
         
         # Центрируем окно

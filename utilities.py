@@ -12,6 +12,15 @@ import subprocess
 import traceback
 import pythoncom
 
+from BlurWindow.blurWindow import GlobalBlur
+
+
+def blur_window(window):
+    if get_windows_version() != "7":  # в Windows 7 слишком сильная прозрачность, поэтому не включаем
+        from ctypes import windll
+        hWnd = windll.user32.FindWindowW(None, window.title())
+        GlobalBlur(hWnd, Acrylic=True)
+
 # Функция для проверки типа диска
 def get_disk_type(drive_letter='C:'):
     """Определение типа диска в Windows (работает в потоках)"""
