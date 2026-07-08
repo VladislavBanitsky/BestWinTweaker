@@ -3,8 +3,11 @@ import psutil
 import cpuinfo
 import GPUtil
 import threading
-from utilities import get_disk_type, get_ddr_type, get_board_model, get_windows_version, get_network_adapter_model
 import time
+import os
+
+from utilities import get_disk_type, get_ddr_type, get_board_model, get_windows_version, get_network_adapter_model
+
 
 
 class DataLoader:
@@ -118,6 +121,11 @@ class DataLoader:
             disks = {}
             for partition in psutil.disk_partitions():
                 try:
+                    
+                    # Пропускаем CD/DVD приводы
+                    if partition.opts and 'cdrom' in partition.opts.lower():
+                        continue
+                    
                     usage = psutil.disk_usage(partition.mountpoint)
                     disks[partition.device] = {
                         'mount': partition.mountpoint,

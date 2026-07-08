@@ -1346,6 +1346,10 @@ class BestWinTweaker:
                 current_disks = {}
                 for partition in psutil.disk_partitions():
                     try:
+                        # Пропускаем CD/DVD приводы
+                        if partition.opts and 'cdrom' in partition.opts.lower():
+                            continue
+                            
                         usage = psutil.disk_usage(partition.mountpoint)
                         current_disks[partition.device] = {
                             'mount': partition.mountpoint,

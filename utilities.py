@@ -26,6 +26,9 @@ def get_disk_type(drive_letter='C:'):
     """Определение типа диска в Windows (работает в потоках)"""
     pythoncom.CoInitialize()  # инициализируем COM для текущего потока (важно!)
     try:
+        # Проверяем, доступен ли диск
+        if not os.path.exists(drive_letter):
+            return 'Unknown'
         c = wmi.WMI()
         drive_letter_clean = drive_letter[0] if drive_letter else 'C'
         
