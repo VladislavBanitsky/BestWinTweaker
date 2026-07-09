@@ -87,7 +87,7 @@ class TweakerTools:
         disabled = 0
         errors = []
         for service in services:
-            cmd = f'sc config "{service}" start= disabled'
+            cmd = f'sc config "{service}" start= disabled && sc stop "{service}"'
             result = TweakerTools.run_cmd(cmd)
             if "усп" in result.lower() or "suc" in result.lower():
                 disabled += 1
