@@ -89,7 +89,7 @@ class TweakerTools:
         for service in services:
             cmd = f'sc config "{service}" start= disabled'
             result = TweakerTools.run_cmd(cmd)
-            if "успешно" in result.lower() or "success" in result.lower():
+            if "усп" in result.lower() or "suc" in result.lower():
                 disabled += 1
             else:
                 errors.append(service)
@@ -144,7 +144,7 @@ class TweakerTools:
     @staticmethod
     def disable_indexing():
         """Отключить индексацию"""
-        cmd = 'sc config "wsearch" start= disabled'
+        cmd = 'sc config "wsearch" start= disabled && sc stop "wsearch"'
         TweakerTools.run_cmd(cmd)
 
     @staticmethod
