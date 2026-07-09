@@ -231,7 +231,34 @@ class TweakerTools:
             (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"),
             (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run")
         ]
-
+        
+        # Пути для проверки статуса отключения (Windows 10/11)
+        disabled_status_paths = [
+            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run")
+        ]
+        
+        # Сначала получаем статусы отключения из StartupApproved
+        disabled_status = {}
+        for hive, reg_path in disabled_status_paths:
+            try:
+                key = winreg.OpenKey(hive, reg_path, 0, winreg.KEY_READ)
+                i = 0
+                while True:
+                    try:
+                        name, value, _ = winreg.EnumValue(key, i)
+                        # В StartupApproved хранятся бинарные данные
+                        # Если первые 2 байта не 00 00, то программа отключена
+                        if isinstance(value, bytes) and len(value) >= 2:
+                            is_disabled = value[0] != 0 or value[1] != 0
+                            disabled_status[name] = is_disabled
+                        i += 1
+                    except WindowsError:
+                        break
+                winreg.CloseKey(key)
+            except WindowsError:
+                pass
+        
         for hive, reg_path in registry_paths:
             try:
                 key = winreg.OpenKey(hive, reg_path, 0, winreg.KEY_READ)
@@ -239,9 +266,17 @@ class TweakerTools:
                 while True:
                     try:
                         name, value, _ = winreg.EnumValue(key, i)
-                        is_disabled = name.startswith("Disabled_")
-                        original_name = name[9:] if is_disabled else name
-
+                        
+                        # Проверяем статус из StartupApproved
+                        is_disabled = disabled_status.get(name, False)
+                        
+                        # Для обратной совместимости проверяем префикс Disabled_
+                        if name.startswith("Disabled_"):
+                            is_disabled = True
+                            original_name = name[9:]
+                        else:
+                            original_name = name
+                        
                         startup_programs.append({
                             "type": "registry",
                             "display_name": original_name,
@@ -266,9 +301,58 @@ class TweakerTools:
         all_programs = TweakerTools.get_startup_registry_programs()
         all_programs.extend(TweakerTools.get_startup_folder_programs())
         return all_programs
-
+    
     @staticmethod
     def disable_registry_program(program):
+        """Отключить программу из реестра (через StartupApproved)"""
+        try:
+            # Проверяем, есть ли запись в Run
+            key = winreg.OpenKey(program["reg_hive"], program["reg_path"], 0, winreg.KEY_SET_VALUE)
+            
+            # Проверяем, существует ли запись
+            try:
+                winreg.QueryValueEx(key, program["original_name"])
+            except WindowsError:
+                # Если записи нет, ничего не делаем
+                winreg.CloseKey(key)
+                return False
+            
+            # Способ 1: Через StartupApproved (современный метод)
+            try:
+                approved_key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+                if program["reg_hive"] == winreg.HKEY_CURRENT_USER:
+                    approved_key = winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER, 
+                        approved_key_path, 
+                        0, 
+                        winreg.KEY_SET_VALUE
+                    )
+                else:
+                    approved_key = winreg.OpenKey(
+                        winreg.HKEY_LOCAL_MACHINE, 
+                        approved_key_path, 
+                        0, 
+                        winreg.KEY_SET_VALUE
+                    )
+                
+                # Устанавливаем бинарное значение для отключения
+                # 02 00 00 00 - отключено, 00 00 00 00 - включено
+                winreg.SetValueEx(approved_key, program["original_name"], 0, winreg.REG_BINARY, b'\x02\x00\x00\x00')
+                winreg.CloseKey(approved_key)
+                winreg.CloseKey(key)
+                return True
+                
+            except WindowsError:
+                # Если StartupApproved не доступен (Windows 7), используем старый метод
+                winreg.CloseKey(key)
+                return TweakerTools.disable_registry_program_legacy(program)
+                
+        except Exception as e:
+            print(f"Error disabling registry program: {e}")
+            return False
+    
+    @staticmethod
+    def disable_registry_program_legacy(program):
         """Отключить программу из реестра"""
         try:
             key = winreg.OpenKey(program["reg_hive"], program["reg_path"], 0, winreg.KEY_SET_VALUE)
@@ -284,11 +368,57 @@ class TweakerTools:
     def enable_registry_program(program):
         """Включить программу в реестре"""
         try:
+            # Удаляем статус отключения из StartupApproved
+            try:
+                approved_key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+                if program["reg_hive"] == winreg.HKEY_CURRENT_USER:
+                    approved_key = winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER, 
+                        approved_key_path, 
+                        0, 
+                        winreg.KEY_SET_VALUE
+                    )
+                else:
+                    approved_key = winreg.OpenKey(
+                        winreg.HKEY_LOCAL_MACHINE, 
+                        approved_key_path, 
+                        0, 
+                        winreg.KEY_SET_VALUE
+                    )
+                
+                # Удаляем запись отключения
+                try:
+                    winreg.DeleteValue(approved_key, program["original_name"])
+                except WindowsError:
+                    pass
+                winreg.CloseKey(approved_key)
+                
+            except WindowsError:
+                pass
+            
+            # Восстанавливаем запись в Run (если была переименована)
             key = winreg.OpenKey(program["reg_hive"], program["reg_path"], 0, winreg.KEY_SET_VALUE)
+            
             if program["original_name"].startswith("Disabled_"):
                 original_name = program["original_name"][9:]
-                winreg.SetValueEx(key, original_name, 0, winreg.REG_SZ, program["path"])
-                winreg.DeleteValue(key, program["original_name"])
+                # Проверяем, существует ли уже запись с оригинальным именем
+                try:
+                    winreg.QueryValueEx(key, original_name)
+                    # Если существует, удаляем старую отключенную запись
+                    winreg.DeleteValue(key, program["original_name"])
+                except WindowsError:
+                    # Если нет, переименовываем
+                    winreg.SetValueEx(key, original_name, 0, winreg.REG_SZ, program["path"])
+                    winreg.DeleteValue(key, program["original_name"])
+            else:
+                # Проверяем, не была ли запись отключена через StartupApproved
+                # Просто убеждаемся, что запись существует
+                try:
+                    winreg.QueryValueEx(key, program["original_name"])
+                except WindowsError:
+                    # Если нет, создаем
+                    winreg.SetValueEx(key, program["original_name"], 0, winreg.REG_SZ, program["path"])
+            
             winreg.CloseKey(key)
             return True
         except:
