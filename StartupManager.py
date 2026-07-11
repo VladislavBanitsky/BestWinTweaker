@@ -100,16 +100,28 @@ class StartupManager:
         return backup_dir / 'startup_backup.json'
     
     def _load_backup(self) -> Dict:
+        backup_min = {
+            "SecurityHealth_HKCU\\Run": {
+                "name": "SecurityHealth",
+                "path": "C:\\WINDOWS\\system32\\SecurityHealthSystray.exe",
+                "source": "HKCU\\Run",
+                "enabled": True,
+                "first_seen": "2026-07-11T14:59:54.605723",
+                "last_seen": "2026-07-11T14:59:54.605723",
+                "updated_at": "2026-07-11T14:59:54.605723"
+            }
+        }
+        
         """Загружает бэкап из файла"""
         if not self._backup_file.exists():
-            return {}
+            return backup_min
         
         try:
             with open(self._backup_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             print(f"Ошибка загрузки бэкапа: {e}")
-            return {}
+            return backup_min
     
     def _save_backup(self, backup_data: Dict):
         """Сохраняет бэкап в файл"""
