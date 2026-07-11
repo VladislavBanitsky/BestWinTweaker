@@ -1,32 +1,42 @@
-from tkinter import *
-from ctypes import windll
+# check_registry.py
+import winreg
 
-from BlurWindow.blurWindow import blur
+HKEY_CURRENT_USER = winreg.HKEY_CURRENT_USER
+HKEY_LOCAL_MACHINE = winreg.HKEY_LOCAL_MACHINE
+REG_PATH_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
-root = Tk()
-root.config(bg='green')
+def check_registry(hkey, path):
+    print(f"\n=== Проверка {path} ===")
+    try:
+        key = winreg.OpenKey(hkey, path, 0, winreg.KEY_READ)
+        i = 0
+        while True:
+            try:
+                name, value, _ = winreg.EnumValue(key, i)
+                print(f"  {name}: '{value}'")
+                if value and value.strip():
+                    print(f"    -> ВКЛЮЧЕНА (путь не пустой)")
+                else:
+                    print(f"    -> ОТКЛЮЧЕНА (путь пустой)")
+                i += 1
+            except WindowsError:
+                break
+        winreg.CloseKey(key)
+    except WindowsError as e:
+        print(f"  Ошибка: {e}")
 
-root.wm_attributes("-transparent", 'green')
-root.geometry('500x400')
+# Проверяем все ветки
+print("=" * 50)
+print("ПРОВЕРКА РЕЕСТРА АВТОЗАГРУЗКИ")
+print("=" * 50)
 
-root.update()
+check_registry(HKEY_CURRENT_USER, REG_PATH_RUN)
+check_registry(HKEY_LOCAL_MACHINE, REG_PATH_RUN)
 
-hWnd = windll.user32.GetForegroundWindow()
-blur(hWnd)
+# Проверяем 32-bit ветку
+try:
+    check_registry(HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run")
+except:
+    pass
 
-
-
-def color(hex):
-    hWnd = windll.user32.GetForegroundWindow()
-    blur(hWnd,hexColor=hex)
-    
-
-e = Entry(width=9)
-e.insert(0,'#12121240')
-
-e.pack()
-b = Button(text='Apply',command=lambda:[color(e.get())])
-b.pack()
-
-
-root.mainloop()
+print("\n" + "=" * 50)

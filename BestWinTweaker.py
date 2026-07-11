@@ -21,6 +21,7 @@ import GPUtil
 from utilities import blur_window, no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, start_download
 from uwpremover import *
 from TweakerTools import TweakerTools
+from StartupManager import StartupManager
 
 # Настройка внешнего вида customtkinter
 ctk.set_appearance_mode("light")
@@ -51,6 +52,8 @@ class BestWinTweaker:
         self._ram_updating = False
         self._disk_cache = {}
         self._ram_cache = {}
+        
+        self.autostart_manager = StartupManager()
         
         # Загружаем предварительные данные
         self.preloaded_disks = self.initial_data.get('Диски', {})
@@ -781,11 +784,11 @@ class BestWinTweaker:
 
         # Контейнер со скроллом для списка программ
         self.autostart_container = ctk.CTkScrollableFrame(self.autostart_tab)
-        self.autostart_container.pack(fill="both", expand=True, padx=20, pady=0)
+        self.autostart_container.pack(fill="both", expand=True, padx=20, pady=10)
 
         # Кнопки управления
         control_frame = ctk.CTkFrame(self.autostart_tab)
-        control_frame.pack(fill="x", padx=20, pady=0)
+        control_frame.pack(fill="x", padx=20, pady=10)
 
         self.apply_autostart_btn = ctk.CTkButton(
             control_frame,
@@ -821,21 +824,29 @@ class BestWinTweaker:
         )
         self.status_label.pack(pady=(0, 10))
 
-        # Загружаем программы
+        # Инициализация
         self.autostart_programs = []
         self.autostart_vars = {}
         self.load_autostart_programs()
 
     def load_autostart_programs(self):
-        """Загрузить программы из автозагрузки"""
+        """Загрузить программы из автозагрузки используя StartupManager"""
         # Очищаем контейнер
         for widget in self.autostart_container.winfo_children():
             widget.destroy()
-
-        self.autostart_programs = TweakerTools.get_all_startup_programs()
+        
+        # Получаем записи через StartupManager
+        entries = self.autostart_manager.get_startup_entries()
+        self.autostart_programs = []
         self.autostart_vars.clear()
-
-        if not self.autostart_programs:
+        
+        # ОТЛАДКА: выводим в консоль реальное состояние
+        print("\n=== РЕАЛЬНОЕ СОСТОЯНИЕ АВТОЗАГРУЗКИ ===")
+        for entry in entries:
+            print(f"  {entry.name}: {'ВКЛЮЧЕНА' if entry.enabled else 'ОТКЛЮЧЕНА'} - {entry.source}")
+        print("=====================================\n")
+        
+        if not entries:
             empty_label = ctk.CTkLabel(
                 self.autostart_container,
                 text="Программы в автозагрузке не найдены",
@@ -845,76 +856,91 @@ class BestWinTweaker:
             empty_label.pack(pady=50)
             self.status_label.configure(text="Программы не найдены")
             return
-
-        # Сортируем программы по имени
+        
+        # Конвертируем StartupEntry в формат, понятный UI
+        for entry in entries:
+            program = {
+                "display_name": entry.name,
+                "is_disabled": not entry.enabled,  # <-- КРИТИЧНО: используем entry.enabled
+                "type": "реестр" if entry.source.startswith("HK") else "папка",
+                "path": entry.path,
+                "full_path": entry.path,
+                "original_name": entry.name,
+                "source": entry.source,
+                "enabled": entry.enabled  # <-- Сохраняем реальное состояние
+            }
+            self.autostart_programs.append(program)
+        
+        # Сортируем по имени
         self.autostart_programs.sort(key=lambda x: x["display_name"].lower())
-
-        # Создаем виджеты для каждой программы
+        
+        # Создаем виджеты
         for program in self.autostart_programs:
             program_frame = ctk.CTkFrame(self.autostart_container)
             program_frame.pack(fill="x", padx=10, pady=3)
-
-            # Чекбокс
-            var = tk.BooleanVar(value=not program["is_disabled"])
+            
+            # Чекбокс - используем РЕАЛЬНОЕ состояние из program["enabled"]
+            is_enabled = program["enabled"]  # <-- КРИТИЧНО: берем из program
+            var = tk.BooleanVar(value=is_enabled)
             self.autostart_vars[self.get_program_key(program)] = var
-
+            
             checkbox = ctk.CTkCheckBox(
                 program_frame,
-                text=program["display_name"][:30],  # первые 30 символов названия проги
+                text=program["display_name"][:35],
                 variable=var,
                 font=ctk.CTkFont(size=13)
             )
             checkbox.pack(side="left", padx=10)
-
-            # Статус
-            if program["is_disabled"]:
+            
+            # Статус - отображаем РЕАЛЬНОЕ состояние
+            if program["enabled"]:  # <-- КРИТИЧНО: используем program["enabled"]
                 status_label = ctk.CTkLabel(
                     program_frame,
-                    text="Отключена",
-                    text_color="red",
-                    font=ctk.CTkFont(size=11)
+                    text="✅ Включена",
+                    text_color="green",
+                    font=ctk.CTkFont(size=11, weight="bold")
                 )
             else:
                 status_label = ctk.CTkLabel(
                     program_frame,
-                    text="Включена",
-                    text_color="green",
-                    font=ctk.CTkFont(size=11)
+                    text="❌ Отключена",
+                    text_color="red",
+                    font=ctk.CTkFont(size=11, weight="bold")
                 )
             status_label.pack(side="left", padx=10)
-
+            
             # Тип программы
-            type_text = "Реестр" if program["type"] == "registry" else "Папка"
             type_label = ctk.CTkLabel(
                 program_frame,
-                text=type_text,
+                text=program["type"],
                 text_color="orange",
                 font=ctk.CTkFont(size=11)
             )
             type_label.pack(side="left", padx=10)
-
-            # Путь (всплывающая подсказка)
-            path = program.get("path") or program.get("full_path") or ""
+            
+            # Путь (сокращенный)
+            path = program.get("path", "")
             if path:
-                short_path = path[:120] + "..." if len(path) > 120 else path
+                short_path = path[:80] + "..." if len(path) > 80 else path
                 path_label = ctk.CTkLabel(
                     program_frame,
                     text=short_path,
                     text_color="gray",
-                    font=ctk.CTkFont(size=10)
+                    font=ctk.CTkFont(size=9)
                 )
                 path_label.pack(side="right", padx=10)
-
+        
+        # Подсчитываем количество включенных
+        enabled_count = sum(1 for p in self.autostart_programs if p["enabled"])
+        total_count = len(self.autostart_programs)
         self.status_label.configure(
-            text=f"Найдено программ: {len(self.autostart_programs)}"
+            text=f"Найдено программ: {total_count} (✅ Включено: {enabled_count}, ❌ Отключено: {total_count - enabled_count})"
         )
 
     def get_program_key(self, program):
         """Получить уникальный ключ программы"""
-        if program["type"] == "registry":
-            return f"reg_{program['reg_hive']}_{program['reg_path']}_{program['original_name']}"
-        else:
-            return f"folder_{program['startup_path']}_{program['filename']}"
+        # Используем имя и путь для уникальности
+        return f"{program['display_name']}_{program.get('path', '')}"
 
     def select_all_autostart(self):
         """Выбрать все программы"""
@@ -927,41 +953,54 @@ class BestWinTweaker:
             var.set(False)
 
     def apply_autostart_changes(self):
-        """Применить изменения автозагрузки"""
+        """Применить изменения автозагрузки используя StartupManager"""
         changes_count = 0
-
+        changes_details = []
+        
         for program in self.autostart_programs:
             key = self.get_program_key(program)
-            current_state = self.autostart_vars[key].get()  # True - должна быть включена
-            actual_state = not program["is_disabled"]  # True - включена
-
-            if current_state != actual_state:
-                if program["type"] == "registry":
-                    if current_state:
-                        success = TweakerTools.enable_registry_program(program)
-                    else:
-                        success = TweakerTools.disable_registry_program(program)
+            # Текущее состояние из чекбокса (чего хочет пользователь)
+            desired_state = self.autostart_vars[key].get()
+            # Реальное состояние программы
+            actual_state = program["enabled"]
+            
+            # Если состояние отличается
+            if desired_state != actual_state:
+                if desired_state:
+                    # Пользователь хочет включить
+                    success = self.autostart_manager.enable_startup(program["display_name"])
+                    if success:
+                        changes_count += 1
+                        program["enabled"] = True
+                        program["is_disabled"] = False
+                        changes_details.append(f"✅ {program['display_name']} - включена")
                 else:
-                    if current_state:
-                        success = TweakerTools.enable_folder_program(program)
-                    else:
-                        success = TweakerTools.disable_folder_program(program)
-
-                if success:
-                    changes_count += 1
-                    program["is_disabled"] = not current_state
-
+                    # Пользователь хочет отключить
+                    success = self.autostart_manager.disable_startup(program["display_name"])
+                    if success:
+                        changes_count += 1
+                        program["enabled"] = False
+                        program["is_disabled"] = True
+                        changes_details.append(f"❌ {program['display_name']} - отключена")
+        
         if changes_count > 0:
+            details_text = "\n".join(changes_details[:10])
+            if len(changes_details) > 10:
+                details_text += f"\n... и еще {len(changes_details) - 10} изменений"
+            
             self.status_label.configure(
-                text=f"Изменено программ: {changes_count}. Для полного эффекта перезагрузите компьютер.",
+                text=f"✅ Изменено программ: {changes_count}. Для полного эффекта перезагрузите компьютер.",
                 text_color="green"
             )
-            messagebox.showinfo("Успех",
-                                f"Изменения применены для {changes_count} программ(ы)!\n\n"
-                                "Для полного эффекта рекомендуется перезагрузить компьютер.")
+            messagebox.showinfo(
+                "Успех",
+                f"Изменения применены для {changes_count} программ(ы)!\n\n"
+                f"{details_text}\n\n"
+                "Для полного эффекта рекомендуется перезагрузить компьютер."
+            )
             self.load_autostart_programs()
         else:
-            self.status_label.configure(text="Изменений не было")
+            self.status_label.configure(text="ℹ️ Изменений не было", text_color="gray")
             messagebox.showinfo("Информация", "Изменений не было")
 
     def update_indexing_button_text(self):
