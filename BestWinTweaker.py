@@ -834,26 +834,6 @@ class BestWinTweaker:
         self.autostart_vars = {}
         self.backup_entries = []
         self.load_autostart_programs()
-    
-    def _restore_from_backup_ui(self, name, source):
-        """Восстанавливает запись из бэкапа (вызывается из основного окна)"""
-        if not messagebox.askyesno(
-            "Подтверждение",
-            f"Восстановить '{name}' из бэкапа?\n\n"
-            f"Запись будет добавлена в '{source}'."
-        ):
-            return
-        
-        success = self.autostart_manager.restore_from_backup(name, source)
-        
-        if success:
-            self.status_label.configure(text=f"✅ '{name}' восстановлена!", text_color="green")
-            messagebox.showinfo("Успех", f"Запись '{name}' восстановлена!")
-            # Обновляем список
-            self.load_autostart_programs()
-        else:
-            self.status_label.configure(text=f"❌ Не удалось восстановить '{name}'", text_color="red")
-            messagebox.showerror("Ошибка", f"Не удалось восстановить '{name}'.")
         
     def load_autostart_programs(self):
         """Загрузить программы из автозагрузки и бэкапа для отображения в UI"""
@@ -1048,11 +1028,10 @@ class BestWinTweaker:
                     success = self.autostart_manager.restore_from_backup(name, source)
                 
                 if success:
-                    self.status_label.configure(text=f"✅ '{name}' восстановлена!", text_color="green")
-                    messagebox.showinfo("Успех", f"Запись '{name}' восстановлена!")
+                    self.status_label.configure(text=f"'{name}' восстановлена!", text_color="green")
                     self.load_autostart_programs()
                 else:
-                    self.status_label.configure(text=f"❌ Не удалось восстановить '{name}'", text_color="red")
+                    self.status_label.configure(text=f"Не удалось восстановить '{name}'", text_color="red")
                     messagebox.showerror("Ошибка", f"Не удалось восстановить '{name}'.\n\nПроверьте, что файл существует.")
             
             key = self.get_program_key(program)
@@ -1118,9 +1097,9 @@ class BestWinTweaker:
                         if not program.get('from_backup', False):
                             program["from_backup"] = True
                             program["is_deleted"] = True
-                        changes_details.append(f"❌ {program['display_name']} - отключена")
+                        changes_details.append(f"{program['display_name']} - отключена")
                     else:
-                        changes_details.append(f"❌ {program['display_name']} - не удалось отключить")
+                        changes_details.append(f"{program['display_name']} - не удалось отключить")
         
         print(f"[DEBUG] Изменений: {changes_count}")
         
@@ -1130,29 +1109,21 @@ class BestWinTweaker:
                 details_text += f"\n... и еще {len(changes_details) - 10} изменений"
             
             self.status_label.configure(
-                text=f"✅ Изменено программ: {changes_count}. Бэкап сохранен",
+                text=f"Изменено программ: {changes_count}. Бэкап {self.autostart_manager._backup_file}",
                 text_color="green"
-            )
-            messagebox.showinfo(
-                "Успех",
-                f"Изменения применены для {changes_count} программ(ы)!\n\n"
-                f"{details_text}\n\n"
-                "📋 Бэкап сохранен в:\n"
-                f"{self.autostart_manager._backup_file}\n\n"
-                "Вы можете восстановить записи через кнопку '📋 Бэкап'."
             )
             self.load_autostart_programs()
         else:
             if changes_details:
                 error_details = "\n".join([d for d in changes_details if "не удалось" in d])
                 if error_details:
-                    self.status_label.configure(text="⚠️ Некоторые изменения не удались", text_color="orange")
+                    self.status_label.configure(text="Некоторые изменения не удались", text_color="orange")
                     messagebox.showwarning("Предупреждение", f"Не удалось изменить некоторые программы:\n\n{error_details}")
                 else:
-                    self.status_label.configure(text="ℹ️ Изменений не было", text_color="gray")
+                    self.status_label.configure(text="Изменений не было", text_color="gray")
                     messagebox.showinfo("Информация", "Изменений не было")
             else:
-                self.status_label.configure(text="ℹ️ Изменений не было", text_color="gray")
+                self.status_label.configure(text="Изменений не было", text_color="gray")
                 messagebox.showinfo("Информация", "Изменений не было")
 
     def get_program_key(self, program):
@@ -1189,7 +1160,6 @@ class BestWinTweaker:
             messagebox.showerror("Ошибка", f"Не удалось очистить временные файлы:\n{error}")
         else:
             self.status_label.configure(text=f"Очищено {deleted} файлов", text_color="green")
-            messagebox.showinfo("Успех", f"Очищено {deleted} временных файлов")
 
     def action_disable_telemetry(self):
         """Отключение телеметрии"""
@@ -1205,7 +1175,6 @@ class BestWinTweaker:
                                    f"Отключено {disabled} служб.\nНе удалось отключить: {', '.join(errors)}")
         else:
             self.status_label.configure(text=f"Отключено {disabled} служб телеметрии", text_color="green")
-            messagebox.showinfo("Успех", f"Успешно отключено {disabled} служб телеметрии")
 
     def action_flush_dns(self):
         """Очистка DNS"""
@@ -1216,7 +1185,6 @@ class BestWinTweaker:
 
         if success:
             self.status_label.configure(text="DNS кэш очищен", text_color="green")
-            messagebox.showinfo("Успех", "DNS кэш успешно очищен")
         else:
             self.status_label.configure(text="Ошибка очистки DNS", text_color="red")
             messagebox.showerror("Ошибка", f"Не удалось очистить DNS кэш:\n{error}")
@@ -1229,10 +1197,7 @@ class BestWinTweaker:
         success, error = TweakerTools.fix_updates()
 
         if success:
-            self.status_label.configure(text="Обновления исправлены, запущена проверка", text_color="green")
-            messagebox.showinfo("Информация",
-                                "Проверка обновлений запущена (может занять время).\n"
-                                "Проверьте Центр обновлений Windows для отслеживания статуса.")
+            self.status_label.configure(text="Запущена проверка Центр обновлений Windows", text_color="green")
         else:
             self.status_label.configure(text="Ошибка при исправлении", text_color="red")
             messagebox.showerror("Ошибка", f"Не удалось исправить ошибки обновлений:\n{error}")
@@ -1244,13 +1209,11 @@ class BestWinTweaker:
             self.window.update()
             TweakerTools.disable_indexing()
             self.status_label.configure(text="Индексация дисков отключена", text_color="green")
-            messagebox.showinfo("Готово", "Индексация дисков отключена.\nЭто снизит нагрузку на диск.")
         else:
             self.status_label.configure(text="Включение индексации...", text_color="orange")
             self.window.update()
             TweakerTools.enable_indexing()
             self.status_label.configure(text="Индексация дисков включена", text_color="green")
-            messagebox.showinfo("Готово", "Индексация дисков включена.\nПоиск файлов будет быстрее.")
 
         self.update_indexing_button_text()
 
@@ -1282,13 +1245,6 @@ class BestWinTweaker:
                     self.status_label.configure(
                         text="✓ Водяной знак удален! Проводник перезапущен.", 
                         text_color="green"
-                    )
-                    messagebox.showinfo(
-                        "Готово",
-                        "Водяной знак сборки Windows должен исчезнуть.\n\n"
-                        "Если знак остался, попробуйте перезагрузить компьютер.\n\n"
-                        "Примечание: На некоторых сборках Windows (например, Insider Preview)\n"
-                        "водяной знак может вернуться после обновления системы."
                     )
                 else:
                     self.status_label.configure(
