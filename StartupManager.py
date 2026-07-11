@@ -46,6 +46,171 @@ class StartupManager:
         """Инициализация менеджера автозагрузки"""
         self._startup_folder = self._get_startup_folder_path()
         self._cache = {}
+        self._backup_file = self._get_backup_file_path()
+    
+    def _get_backup_file_path(self) -> Path:
+        """Получает путь к файлу бэкапа автозагрузки"""
+        # Создаем папку .bwt в домашней директории пользователя
+        backup_dir = Path(os.environ.get('USERPROFILE', '')) / '.bwt' / 'backups'
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        return backup_dir / 'startup_backup.json'
+    
+    def _load_backup(self) -> Dict:
+        """Загружает бэкап из файла"""
+        if not self._backup_file.exists():
+            return {}
+        
+        try:
+            with open(self._backup_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Ошибка загрузки бэкапа: {e}")
+            return {}
+    
+    def _save_backup(self, backup_data: Dict):
+        """Сохраняет бэкап в файл"""
+        try:
+            # Сортируем для удобства чтения
+            sorted_backup = dict(sorted(backup_data.items()))
+            with open(self._backup_file, 'w', encoding='utf-8') as f:
+                json.dump(sorted_backup, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"Ошибка сохранения бэкапа: {e}")
+            return False
+    
+    def _backup_registry_entry(self, name: str, path: str, source: str, enabled: bool):
+        """Сохраняет запись в бэкап с дополнением"""
+        backup = self._load_backup()
+        
+        # Создаем уникальный ключ для записи
+        entry_key = f"{name}_{source.replace('\\', '_')}"
+        
+        # Проверяем, существует ли уже такая запись
+        if entry_key in backup:
+            # Если запись уже есть, обновляем только если изменилось состояние
+            if (backup[entry_key].get('path') != path or 
+                backup[entry_key].get('enabled') != enabled):
+                backup[entry_key].update({
+                    'path': path,
+                    'enabled': enabled,
+                    'last_seen': datetime.now().isoformat(),
+                    'updated_at': datetime.now().isoformat()
+                })
+        else:
+            # Новая запись
+            backup[entry_key] = {
+                'name': name,
+                'path': path,
+                'source': source,
+                'enabled': enabled,
+                'first_seen': datetime.now().isoformat(),
+                'last_seen': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }
+        
+        self._save_backup(backup)
+        return True
+    
+    def _remove_from_backup(self, name: str, source: str):
+        """Помечает запись как удаленную в бэкапе"""
+        backup = self._load_backup()
+        entry_key = f"{name}_{source.replace('\\', '_')}"
+        
+        if entry_key in backup:
+            backup[entry_key]['deleted_at'] = datetime.now().isoformat()
+            backup[entry_key]['enabled'] = False
+            self._save_backup(backup)
+            return True
+        return False
+    
+    def get_backup_entries(self) -> List[Dict]:
+        """Получает все записи из бэкапа"""
+        backup = self._load_backup()
+        entries = []
+        
+        for key, data in backup.items():
+            # Пропускаем записи без имени
+            if 'name' not in data:
+                continue
+            
+            entries.append({
+                'name': data.get('name', ''),
+                'path': data.get('path', ''),
+                'source': data.get('source', 'Unknown'),
+                'enabled': data.get('enabled', False),
+                'first_seen': data.get('first_seen', ''),
+                'last_seen': data.get('last_seen', ''),
+                'deleted_at': data.get('deleted_at', ''),
+                'is_deleted': 'deleted_at' in data
+            })
+        
+        # Сортируем по имени
+        entries.sort(key=lambda x: x['name'].lower())
+        return entries
+    
+    def restore_from_backup(self, name: str, source: str) -> bool:
+        """Восстанавливает запись из бэкапа в реестр"""
+        backup = self._load_backup()
+        entry_key = f"{name}_{source.replace('\\', '_')}"
+        
+        if entry_key not in backup:
+            return False
+        
+        data = backup[entry_key]
+        
+        # Восстанавливаем в соответствующий раздел реестра
+        if source == 'HKCU\\Run':
+            return self._set_registry_value(HKEY_CURRENT_USER, REG_PATH_RUN, name, data.get('path', ''))
+        elif source == 'HKLM\\Run':
+            return self._set_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN, name, data.get('path', ''))
+        elif source == 'HKLM\\Run (32-bit)':
+            return self._set_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN_32, name, data.get('path', ''))
+        
+        return False
+    
+    def get_startup_entries_with_backup(self) -> Tuple[List[StartupEntry], List[Dict]]:
+        """
+        Получает текущие записи автозагрузки и записи из бэкапа
+        Returns:
+            Tuple[List[StartupEntry], List[Dict]]: (текущие записи, бэкап записи)
+        """
+        current_entries = self.get_startup_entries()
+        backup_entries = self.get_backup_entries()
+        
+        # Отмечаем, какие записи из бэкапа уже есть в текущих
+        current_names = {(e.name, e.source) for e in current_entries}
+        
+        for backup_entry in backup_entries:
+            key = (backup_entry['name'], backup_entry['source'])
+            backup_entry['is_active'] = key in current_names
+        
+        return current_entries, backup_entries
+    
+    def enable_startup_with_backup(self, app_name: str) -> bool:
+        """Включает автозагрузку с сохранением в бэкап"""
+        result = self.enable_startup(app_name)
+        if result:
+            # Сохраняем в бэкап
+            entries = self.get_startup_entries()
+            for entry in entries:
+                if entry.name.lower() == app_name.lower():
+                    self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
+                    break
+        return result
+    
+    def disable_startup_with_backup(self, app_name: str) -> bool:
+        """Отключает автозагрузку с сохранением в бэкап"""
+        # Получаем информацию о записи до удаления
+        entries = self.get_startup_entries()
+        for entry in entries:
+            if entry.name.lower() == app_name.lower():
+                # Сохраняем в бэкап перед удалением
+                self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
+                break
+        
+        result = self.disable_startup(app_name)
+        return result
     
     def _get_startup_folder_path(self) -> Path:
         """Получает путь к папке автозагрузки текущего пользователя"""

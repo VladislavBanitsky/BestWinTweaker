@@ -773,14 +773,26 @@ class BestWinTweaker:
         )
         title_label.pack(side="left")
 
-        # Кнопка обновления
+        # Кнопки управления
+        btn_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        btn_frame.pack(side="right")
+        
+        # Кнопка показа бэкапа
+        self.show_backup_btn = ctk.CTkButton(
+            btn_frame,
+            text="📋 Бэкап",
+            command=self.show_backup_entries,
+            width=100
+        )
+        self.show_backup_btn.pack(side="left", padx=5)
+
         self.refresh_autostart_btn = ctk.CTkButton(
-            header_frame,
+            btn_frame,
             text="Обновить",
             command=self.load_autostart_programs,
-            width=120
+            width=100
         )
-        self.refresh_autostart_btn.pack(side="right")
+        self.refresh_autostart_btn.pack(side="left", padx=5)
 
         # Контейнер со скроллом для списка программ
         self.autostart_container = ctk.CTkScrollableFrame(self.autostart_tab)
@@ -827,6 +839,7 @@ class BestWinTweaker:
         # Инициализация
         self.autostart_programs = []
         self.autostart_vars = {}
+        self.backup_entries = []
         self.load_autostart_programs()
 
     def load_autostart_programs(self):
@@ -835,8 +848,9 @@ class BestWinTweaker:
         for widget in self.autostart_container.winfo_children():
             widget.destroy()
         
-        # Получаем записи через StartupManager
-        entries = self.autostart_manager.get_startup_entries()
+        # Получаем записи через StartupManager (с бэкапом)
+        entries, backup_entries = self.autostart_manager.get_startup_entries_with_backup()
+        self.backup_entries = backup_entries
         self.autostart_programs = []
         self.autostart_vars.clear()
         
@@ -861,13 +875,13 @@ class BestWinTweaker:
         for entry in entries:
             program = {
                 "display_name": entry.name,
-                "is_disabled": not entry.enabled,  # <-- КРИТИЧНО: используем entry.enabled
+                "is_disabled": not entry.enabled,
                 "type": "реестр" if entry.source.startswith("HK") else "папка",
                 "path": entry.path,
                 "full_path": entry.path,
                 "original_name": entry.name,
                 "source": entry.source,
-                "enabled": entry.enabled  # <-- Сохраняем реальное состояние
+                "enabled": entry.enabled
             }
             self.autostart_programs.append(program)
         
@@ -880,7 +894,7 @@ class BestWinTweaker:
             program_frame.pack(fill="x", padx=10, pady=3)
             
             # Чекбокс - используем РЕАЛЬНОЕ состояние из program["enabled"]
-            is_enabled = program["enabled"]  # <-- КРИТИЧНО: берем из program
+            is_enabled = program["enabled"]
             var = tk.BooleanVar(value=is_enabled)
             self.autostart_vars[self.get_program_key(program)] = var
             
@@ -893,7 +907,7 @@ class BestWinTweaker:
             checkbox.pack(side="left", padx=10)
             
             # Статус - отображаем РЕАЛЬНОЕ состояние
-            if program["enabled"]:  # <-- КРИТИЧНО: используем program["enabled"]
+            if program["enabled"]:
                 status_label = ctk.CTkLabel(
                     program_frame,
                     text="✅ Включена",
@@ -933,9 +947,233 @@ class BestWinTweaker:
         # Подсчитываем количество включенных
         enabled_count = sum(1 for p in self.autostart_programs if p["enabled"])
         total_count = len(self.autostart_programs)
+        backup_count = len(self.backup_entries)
         self.status_label.configure(
-            text=f"Найдено программ: {total_count} (✅ Включено: {enabled_count}, ❌ Отключено: {total_count - enabled_count})"
+            text=f"Найдено программ: {total_count} (✅ Включено: {enabled_count}, ❌ Отключено: {total_count - enabled_count}) | Бэкап: {backup_count} записей"
         )
+
+    def show_backup_entries(self):
+        """Показать окно с записями из бэкапа"""
+        backup_window = ctk.CTkToplevel(self.window)
+        backup_window.title("Бэкап автозагрузки")
+        backup_window.geometry("900x600")
+        backup_window.after(200, lambda: blur_window(backup_window))
+        backup_window.transient(self.window)
+        backup_window.grab_set()
+        backup_window.resizable(True, True)
+        
+        # Основной контейнер
+        main_frame = ctk.CTkFrame(backup_window)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Заголовок
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 10))
+        
+        title_label = ctk.CTkLabel(
+            header_frame,
+            text="📋 История автозагрузки (бэкап)",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        title_label.pack(side="left")
+        
+        # Кнопка обновить бэкап
+        refresh_backup_btn = ctk.CTkButton(
+            header_frame,
+            text="Обновить",
+            command=lambda: self._refresh_backup_window(backup_window),
+            width=100
+        )
+        refresh_backup_btn.pack(side="right", padx=5)
+        
+        # Контейнер со скроллом
+        backup_container = ctk.CTkScrollableFrame(main_frame)
+        backup_container.pack(fill="both", expand=True)
+        
+        # Загружаем бэкап
+        self._display_backup_entries(backup_container, backup_window)
+
+    def _refresh_backup_window(self, window):
+        """Обновить содержимое окна бэкапа"""
+        # Находим контейнер
+        for child in window.winfo_children():
+            if isinstance(child, ctk.CTkFrame):
+                for subchild in child.winfo_children():
+                    if isinstance(subchild, ctk.CTkScrollableFrame):
+                        # Очищаем контейнер
+                        for widget in subchild.winfo_children():
+                            widget.destroy()
+                        # Перезагружаем бэкап
+                        self._display_backup_entries(subchild, window)
+                        break
+                break
+
+    def _display_backup_entries(self, container, window):
+        """Отображает записи бэкапа в контейнере"""
+        backup_entries = self.autostart_manager.get_backup_entries()
+        
+        if not backup_entries:
+            empty_label = ctk.CTkLabel(
+                container,
+                text="Бэкап пуст. Нет сохраненных записей автозагрузки.",
+                font=ctk.CTkFont(size=14),
+                text_color="gray"
+            )
+            empty_label.pack(pady=50)
+            return
+        
+        # Подсчет статистики
+        active_count = sum(1 for e in backup_entries if not e.get('is_deleted', False))
+        deleted_count = sum(1 for e in backup_entries if e.get('is_deleted', False))
+        
+        stats_label = ctk.CTkLabel(
+            container,
+            text=f"Всего записей: {len(backup_entries)} | Активных: {active_count} | Удаленных: {deleted_count}",
+            font=ctk.CTkFont(size=12),
+            text_color="gray"
+        )
+        stats_label.pack(pady=(0, 10))
+        
+        for entry in backup_entries:
+            entry_frame = ctk.CTkFrame(container)
+            entry_frame.pack(fill="x", padx=5, pady=3)
+            
+            # Индикатор состояния
+            is_deleted = entry.get('is_deleted', False)
+            status_text = "❌ Удалена" if is_deleted else "✅ Активна"
+            status_color = "red" if is_deleted else "green"
+            
+            # Имя
+            name_label = ctk.CTkLabel(
+                entry_frame,
+                text=entry['name'],
+                font=ctk.CTkFont(size=14, weight="bold")
+            )
+            name_label.pack(side="left", padx=10)
+            
+            # Источник
+            source_label = ctk.CTkLabel(
+                entry_frame,
+                text=entry['source'],
+                font=ctk.CTkFont(size=11),
+                text_color="orange"
+            )
+            source_label.pack(side="left", padx=10)
+            
+            # Статус
+            status_label = ctk.CTkLabel(
+                entry_frame,
+                text=status_text,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                text_color=status_color
+            )
+            status_label.pack(side="left", padx=10)
+            
+            # Дата
+            first_seen = entry.get('first_seen', '').split('T')[0] if entry.get('first_seen') else ''
+            last_seen = entry.get('last_seen', '').split('T')[0] if entry.get('last_seen') else ''
+            date_label = ctk.CTkLabel(
+                entry_frame,
+                text=f"Создан: {first_seen} | Последний: {last_seen}",
+                font=ctk.CTkFont(size=10),
+                text_color="gray"
+            )
+            date_label.pack(side="left", padx=10)
+            
+            # Кнопка восстановления (только для удаленных записей)
+            if is_deleted:
+                restore_btn = ctk.CTkButton(
+                    entry_frame,
+                    text="↩ Восстановить",
+                    width=100,
+                    height=25,
+                    fg_color="green",
+                    hover_color="darkgreen",
+                    command=lambda n=entry['name'], s=entry['source'], w=window: self._restore_from_backup(n, s, w)
+                )
+                restore_btn.pack(side="right", padx=5)
+            else:
+                # Показываем, что запись активна
+                active_label = ctk.CTkLabel(
+                    entry_frame,
+                    text="В реестре",
+                    font=ctk.CTkFont(size=10),
+                    text_color="green"
+                )
+                active_label.pack(side="right", padx=5)
+
+    def _restore_from_backup(self, name, source, window):
+        """Восстанавливает запись из бэкапа"""
+        if not messagebox.askyesno(
+            "Подтверждение",
+            f"Восстановить '{name}' из бэкапа?\n\n"
+            f"Запись будет добавлена в '{source}'."
+        ):
+            return
+        
+        success = self.autostart_manager.restore_from_backup(name, source)
+        
+        if success:
+            messagebox.showinfo("Успех", f"Запись '{name}' восстановлена!")
+            # Обновляем окно бэкапа
+            self._refresh_backup_window(window)
+            # Обновляем основную вкладку
+            self.load_autostart_programs()
+        else:
+            messagebox.showerror("Ошибка", f"Не удалось восстановить '{name}'.")
+
+    def apply_autostart_changes(self):
+        """Применить изменения автозагрузки используя StartupManager с бэкапом"""
+        changes_count = 0
+        changes_details = []
+        
+        for program in self.autostart_programs:
+            key = self.get_program_key(program)
+            # Текущее состояние из чекбокса (чего хочет пользователь)
+            desired_state = self.autostart_vars[key].get()
+            # Реальное состояние программы
+            actual_state = program["enabled"]
+            
+            # Если состояние отличается
+            if desired_state != actual_state:
+                if desired_state:
+                    # Пользователь хочет включить - с бэкапом
+                    success = self.autostart_manager.enable_startup_with_backup(program["display_name"])
+                    if success:
+                        changes_count += 1
+                        program["enabled"] = True
+                        program["is_disabled"] = False
+                        changes_details.append(f"✅ {program['display_name']} - включена (сохранено в бэкап)")
+                else:
+                    # Пользователь хочет отключить - с бэкапом
+                    success = self.autostart_manager.disable_startup_with_backup(program["display_name"])
+                    if success:
+                        changes_count += 1
+                        program["enabled"] = False
+                        program["is_disabled"] = True
+                        changes_details.append(f"❌ {program['display_name']} - отключена (сохранено в бэкап)")
+        
+        if changes_count > 0:
+            details_text = "\n".join(changes_details[:10])
+            if len(changes_details) > 10:
+                details_text += f"\n... и еще {len(changes_details) - 10} изменений"
+            
+            self.status_label.configure(
+                text=f"✅ Изменено программ: {changes_count}. Бэкап создан в C:\\Users\\%USERNAME%\\.bwt\\backups\\startup_backup.json",
+                text_color="green"
+            )
+            messagebox.showinfo(
+                "Успех",
+                f"Изменения применены для {changes_count} программ(ы)!\n\n"
+                f"{details_text}\n\n"
+                "📋 Бэкап сохранен в:\n"
+                f"C:\\Users\\%USERNAME%\\.bwt\\backups\\startup_backup.json\n\n"
+                "Вы можете восстановить записи через кнопку '📋 Бэкап'."
+            )
+            self.load_autostart_programs()
+        else:
+            self.status_label.configure(text="ℹ️ Изменений не было", text_color="gray")
+            messagebox.showinfo("Информация", "Изменений не было")
 
     def get_program_key(self, program):
         """Получить уникальный ключ программы"""
