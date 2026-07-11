@@ -3,9 +3,11 @@ import sys
 import ctypes
 import winreg
 import subprocess
+import json  # <-- ДОБАВЬТЕ ЭТУ СТРОКУ
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass
+from datetime import datetime  # <-- И ЭТУ СТРОКУ
 
 # Константы для работы с реестром
 HKEY_CURRENT_USER = winreg.HKEY_CURRENT_USER
@@ -47,6 +49,48 @@ class StartupManager:
         self._startup_folder = self._get_startup_folder_path()
         self._cache = {}
         self._backup_file = self._get_backup_file_path()
+        print(f"[БЭКАП] Файл бэкапа: {self._backup_file}")
+        self.cleanup_backup()
+    
+    def cleanup_backup(self):
+        """Очищает бэкап от дублирующихся записей"""
+        backup = self._load_backup()
+        
+        if not backup:
+            return
+        
+        # Словарь для хранения последней версии каждой записи
+        latest_entries = {}
+        
+        for key, data in backup.items():
+            if 'name' not in data:
+                continue
+            
+            name = data.get('name', '')
+            source = data.get('source', 'Unknown')
+            dedup_key = f"{name}_{source}"
+            
+            # Если запись уже есть, выбираем самую свежую
+            if dedup_key in latest_entries:
+                existing = latest_entries[dedup_key]
+                existing_date = existing.get('updated_at', '')
+                new_date = data.get('updated_at', '')
+                
+                # Если новая запись свежее - заменяем
+                if new_date > existing_date:
+                    latest_entries[dedup_key] = data
+            else:
+                latest_entries[dedup_key] = data
+        
+        # Перестраиваем бэкап только с уникальными записями
+        cleaned_backup = {}
+        for key, data in latest_entries.items():
+            # Восстанавливаем оригинальный ключ для обратной совместимости
+            original_key = f"{data['name']}_{data['source'].replace('\\', '_')}"
+            cleaned_backup[original_key] = data
+        
+        self._save_backup(cleaned_backup)
+        print(f"[БЭКАП] Очистка завершена. Осталось {len(cleaned_backup)} уникальных записей")
     
     def _get_backup_file_path(self) -> Path:
         """Получает путь к файлу бэкапа автозагрузки"""
@@ -80,49 +124,73 @@ class StartupManager:
             return False
     
     def _backup_registry_entry(self, name: str, path: str, source: str, enabled: bool):
-        """Сохраняет запись в бэкап с дополнением"""
+        """Сохраняет запись в бэкап с дополнением (обновляет существующую)"""
+        print(f"[БЭКАП] Сохранение записи: {name} ({source}) - {'ВКЛ' if enabled else 'ОТКЛ'}")
+        
+        # Раскрываем переменные окружения для сохранения
+        expanded_path = os.path.expandvars(path.strip().strip('"'))
+        print(f"[БЭКАП] Сохраняем путь: {expanded_path}")
+        
         backup = self._load_backup()
         
-        # Создаем уникальный ключ для записи
-        entry_key = f"{name}_{source.replace('\\', '_')}"
+        # Создаем уникальный ключ для записи (используем name + source без преобразования)
+        # Важно: используем одинаковый ключ для одной и той же программы
+        entry_key = f"{name}_{source}"  # Просто конкатенация, без замены \
+        
+        print(f"[БЭКАП] Ключ записи: {entry_key}")
         
         # Проверяем, существует ли уже такая запись
         if entry_key in backup:
-            # Если запись уже есть, обновляем только если изменилось состояние
-            if (backup[entry_key].get('path') != path or 
-                backup[entry_key].get('enabled') != enabled):
+            # Если запись уже есть, обновляем
+            old_enabled = backup[entry_key].get('enabled', False)
+            old_path = backup[entry_key].get('path', '')
+            
+            # Обновляем только если изменилось состояние или путь
+            if old_path != expanded_path or old_enabled != enabled:
                 backup[entry_key].update({
-                    'path': path,
+                    'path': expanded_path,
                     'enabled': enabled,
                     'last_seen': datetime.now().isoformat(),
                     'updated_at': datetime.now().isoformat()
                 })
+                # Если запись была удалена и теперь включена - убираем deleted_at
+                if enabled and 'deleted_at' in backup[entry_key]:
+                    del backup[entry_key]['deleted_at']
+                print(f"[БЭКАП] Обновлена запись: {name}")
+            else:
+                print(f"[БЭКАП] Запись не изменилась: {name}")
         else:
             # Новая запись
             backup[entry_key] = {
                 'name': name,
-                'path': path,
+                'path': expanded_path,
                 'source': source,
                 'enabled': enabled,
                 'first_seen': datetime.now().isoformat(),
                 'last_seen': datetime.now().isoformat(),
                 'updated_at': datetime.now().isoformat()
             }
+            print(f"[БЭКАП] Добавлена новая запись: {name}")
         
-        self._save_backup(backup)
+        success = self._save_backup(backup)
+        print(f"[БЭКАП] Сохранение {'успешно' if success else 'не удалось'}")
         return True
     
     def _remove_from_backup(self, name: str, source: str):
         """Помечает запись как удаленную в бэкапе"""
         backup = self._load_backup()
-        entry_key = f"{name}_{source.replace('\\', '_')}"
+        entry_key = f"{name}_{source}"  # Используем тот же формат ключа
         
         if entry_key in backup:
             backup[entry_key]['deleted_at'] = datetime.now().isoformat()
             backup[entry_key]['enabled'] = False
+            backup[entry_key]['updated_at'] = datetime.now().isoformat()
             self._save_backup(backup)
+            print(f"[БЭКАП] Запись помечена как удаленная: {name}")
             return True
-        return False
+        else:
+            print(f"[БЭКАП] Запись не найдена для удаления: {name}")
+            return False
     
     def get_backup_entries(self) -> List[Dict]:
         """Получает все записи из бэкапа"""
@@ -134,10 +202,19 @@ class StartupManager:
             if 'name' not in data:
                 continue
             
+            # Проверяем, есть ли дубликаты (по имени и источнику)
+            name = data.get('name', '')
+            source = data.get('source', 'Unknown')
+            
+            # Проверяем, не добавлена ли уже такая запись
+            is_duplicate = any(e['name'] == name and e['source'] == source for e in entries)
+            if is_duplicate:
+                continue
+            
             entries.append({
-                'name': data.get('name', ''),
+                'name': name,
                 'path': data.get('path', ''),
-                'source': data.get('source', 'Unknown'),
+                'source': source,
                 'enabled': data.get('enabled', False),
                 'first_seen': data.get('first_seen', ''),
                 'last_seen': data.get('last_seen', ''),
@@ -149,25 +226,238 @@ class StartupManager:
         entries.sort(key=lambda x: x['name'].lower())
         return entries
     
+    
+    def debug_enable_startup_with_path(self, app_name: str, app_path: str) -> bool:
+        """Отладочная версия enable_startup_with_path"""
+        print(f"[ОТЛАДКА] enable_startup_with_path: {app_name} -> {app_path}")
+        
+        # Проверяем путь
+        if not app_path:
+            print("[ОТЛАДКА] Путь пустой!")
+            return False
+        
+        # Нормализуем путь
+        clean_path = app_path.strip().strip('"')
+        print(f"[ОТЛАДКА] Нормализованный путь: {clean_path}")
+        
+        # Проверяем существование файла
+        if not os.path.exists(clean_path):
+            print(f"[ОТЛАДКА] Файл НЕ СУЩЕСТВУЕТ: {clean_path}")
+            return False
+        else:
+            print(f"[ОТЛАДКА] Файл существует: {clean_path}")
+        
+        # Проверяем, есть ли уже запись
+        entries = self.get_startup_entries()
+        for entry in entries:
+            if entry.name.lower() == app_name.lower():
+                if entry.enabled:
+                    print("[ОТЛАДКА] Запись уже включена")
+                    return True
+                print("[ОТЛАДКА] Запись есть, но отключена - удаляем")
+                self.disable_startup(app_name)
+                break
+        
+        # Добавляем запись в HKCU\Run
+        print(f"[ОТЛАДКА] Добавляем запись в реестр: {app_name} -> \"{clean_path}\"")
+        success = self._set_registry_value(
+            HKEY_CURRENT_USER,
+            REG_PATH_RUN,
+            app_name,
+            f'"{clean_path}"'
+        )
+        
+        print(f"[ОТЛАДКА] Результат записи в реестр: {success}")
+        
+        if success:
+            self._notify_system_changes()
+            # Сохраняем в бэкап
+            entries = self.get_startup_entries()
+            for entry in entries:
+                if entry.name.lower() == app_name.lower():
+                    self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
+                    break
+        
+        return success
+    
     def restore_from_backup(self, name: str, source: str) -> bool:
         """Восстанавливает запись из бэкапа в реестр"""
         backup = self._load_backup()
-        entry_key = f"{name}_{source.replace('\\', '_')}"
+        entry_key = f"{name}_{source}"  # Тот же формат ключа
         
         if entry_key not in backup:
+            print(f"[БЭКАП] Запись не найдена: {entry_key}")
             return False
         
         data = backup[entry_key]
+        app_path = data.get('path', '')
+        
+        # Раскрываем переменные окружения
+        expanded_path = os.path.expandvars(app_path.strip().strip('"'))
+        print(f"[БЭКАП] Восстановление: {name} -> {expanded_path}")
+        
+        # Проверяем, существует ли файл
+        if not os.path.exists(expanded_path):
+            print(f"[БЭКАП] Файл не существует: {expanded_path}")
+            return False
         
         # Восстанавливаем в соответствующий раздел реестра
         if source == 'HKCU\\Run':
-            return self._set_registry_value(HKEY_CURRENT_USER, REG_PATH_RUN, name, data.get('path', ''))
+            success = self._set_registry_value(HKEY_CURRENT_USER, REG_PATH_RUN, name, f'"{expanded_path}"')
         elif source == 'HKLM\\Run':
-            return self._set_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN, name, data.get('path', ''))
+            success = self._set_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN, name, f'"{expanded_path}"')
         elif source == 'HKLM\\Run (32-bit)':
-            return self._set_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN_32, name, data.get('path', ''))
+            success = self._set_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN_32, name, f'"{expanded_path}"')
+        else:
+            return False
         
-        return False
+        if success:
+            # Удаляем метку удаления из бэкапа
+            if 'deleted_at' in backup[entry_key]:
+                del backup[entry_key]['deleted_at']
+            backup[entry_key]['enabled'] = True
+            backup[entry_key]['updated_at'] = datetime.now().isoformat()
+            self._save_backup(backup)
+            print(f"[БЭКАП] Запись восстановлена: {name}")
+        
+        return success
+    
+    def enable_startup_from_backup(self, app_name: str, app_path: str) -> bool:
+        """
+        Включает автозагрузку для приложения используя путь из бэкапа.
+        
+        Args:
+            app_name: Имя приложения
+            app_path: Путь к исполняемому файлу из бэкапа
+            
+        Returns:
+            bool: True если успешно, False в противном случае
+        """
+        print(f"[БЭКАП] ВКЛЮЧЕНИЕ ИЗ БЭКАПА: {app_name} -> {app_path}")
+        
+        if not app_path:
+            print("[БЭКАП] Путь пустой!")
+            return False
+        
+        # Нормализуем путь
+        clean_path = app_path.strip().strip('"')
+        print(f"[БЭКАП] Нормализованный путь: {clean_path}")
+        
+        # РАСКРЫВАЕМ ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
+        expanded_path = os.path.expandvars(clean_path)
+        print(f"[БЭКАП] Раскрытый путь: {expanded_path}")
+        
+        # Проверяем существование файла с раскрытым путем
+        if not os.path.exists(expanded_path):
+            print(f"[БЭКАП] Файл НЕ СУЩЕСТВУЕТ: {expanded_path}")
+            
+            # Пробуем найти похожие файлы в папке
+            dir_path = os.path.dirname(expanded_path)
+            file_name = os.path.basename(expanded_path)
+            base_name = os.path.splitext(file_name)[0]
+            
+            print(f"[БЭКАП] Ищем похожие файлы в: {dir_path}")
+            if os.path.exists(dir_path):
+                try:
+                    # Ищем файлы с похожим именем
+                    for f in os.listdir(dir_path):
+                        # Ищем файлы .exe, начинающиеся с base_name
+                        if f.lower().startswith(base_name.lower()) and f.lower().endswith('.exe'):
+                            found_path = os.path.join(dir_path, f)
+                            print(f"[БЭКАП] Найден похожий файл: {found_path}")
+                            # Используем найденный файл
+                            expanded_path = found_path
+                            break
+                except Exception as e:
+                    print(f"[БЭКАП] Ошибка поиска: {e}")
+            
+            # Если не нашли похожий файл, пробуем найти по имени через where
+            if not os.path.exists(expanded_path):
+                print(f"[БЭКАП] Пробуем найти по имени: {app_name}")
+                return self.enable_startup(app_name)
+        
+        print(f"[БЭКАП] Используем путь: {expanded_path}")
+        
+        # Проверяем, есть ли уже запись
+        entries = self.get_startup_entries()
+        for entry in entries:
+            if entry.name.lower() == app_name.lower():
+                if entry.enabled:
+                    print("[БЭКАП] Запись уже включена")
+                    return True
+                print("[БЭКАП] Запись есть, но отключена - удаляем")
+                self.disable_startup(app_name)
+                break
+        
+        # Добавляем запись в HKCU\Run с РАСКРЫТЫМ путем
+        print(f"[БЭКАП] Добавляем запись в реестр: {app_name} -> \"{expanded_path}\"")
+        success = self._set_registry_value(
+            HKEY_CURRENT_USER,
+            REG_PATH_RUN,
+            app_name,
+            f'"{expanded_path}"'
+        )
+        
+        print(f"[БЭКАП] Результат: {success}")
+        
+        if success:
+            self._notify_system_changes()
+            # Сохраняем в бэкап
+            entries = self.get_startup_entries()
+            for entry in entries:
+                if entry.name.lower() == app_name.lower():
+                    self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
+                    break
+        
+        return success
+    
+    
+    def enable_startup_with_path(self, app_name: str, app_path: str) -> bool:
+        """
+        Включает автозагрузку для приложения с указанным путем.
+        
+        Args:
+            app_name: Имя приложения
+            app_path: Полный путь к исполняемому файлу
+            
+        Returns:
+            bool: True если успешно, False в противном случае
+        """
+        print(f"[БЭКАП] ВКЛЮЧЕНИЕ с путем: {app_name} -> {app_path}")
+        
+        # Проверяем, есть ли уже запись
+        entries = self.get_startup_entries()
+        for entry in entries:
+            if entry.name.lower() == app_name.lower():
+                if entry.enabled:
+                    return True
+                # Если запись отключена, удаляем её
+                self.disable_startup(app_name)
+                break
+        
+        # Проверяем, существует ли файл
+        if not os.path.exists(app_path):
+            print(f"[БЭКАП] Файл не существует: {app_path}")
+            return False
+        
+        # Добавляем запись в HKCU\Run
+        success = self._set_registry_value(
+            HKEY_CURRENT_USER,
+            REG_PATH_RUN,
+            app_name,
+            f'"{app_path}"'
+        )
+        
+        if success:
+            self._notify_system_changes()
+            # Сохраняем в бэкап
+            entries = self.get_startup_entries()
+            for entry in entries:
+                if entry.name.lower() == app_name.lower():
+                    self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
+                    break
+        
+        return success
     
     def get_startup_entries_with_backup(self) -> Tuple[List[StartupEntry], List[Dict]]:
         """
@@ -189,27 +479,47 @@ class StartupManager:
     
     def enable_startup_with_backup(self, app_name: str) -> bool:
         """Включает автозагрузку с сохранением в бэкап"""
+        print(f"[БЭКАП] ВКЛЮЧЕНИЕ: {app_name}")
+        
+        # Сначала включаем
         result = self.enable_startup(app_name)
+        print(f"[БЭКАП] Результат включения: {result}")
+        
         if result:
-            # Сохраняем в бэкап
+            # Получаем обновленный список и сохраняем
             entries = self.get_startup_entries()
             for entry in entries:
                 if entry.name.lower() == app_name.lower():
+                    print(f"[БЭКАП] Найдена запись: {entry.name} - {entry.source}")
                     self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
                     break
+            else:
+                print(f"[БЭКАП] Запись {app_name} не найдена после включения")
+        
         return result
-    
+
     def disable_startup_with_backup(self, app_name: str) -> bool:
         """Отключает автозагрузку с сохранением в бэкап"""
-        # Получаем информацию о записи до удаления
+        print(f"[БЭКАП] ОТКЛЮЧЕНИЕ: {app_name}")
+        
+        # Сначала получаем информацию о записи
         entries = self.get_startup_entries()
+        found = False
         for entry in entries:
             if entry.name.lower() == app_name.lower():
-                # Сохраняем в бэкап перед удалением
+                print(f"[БЭКАП] Найдена запись: {entry.name} - {entry.source}")
                 self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
+                found = True
                 break
         
+        if not found:
+            print(f"[БЭКАП] Запись {app_name} не найдена в текущей автозагрузке")
+            # Возвращаем True, так как записи нет - ничего отключать не нужно
+            return True
+        
+        # Затем отключаем
         result = self.disable_startup(app_name)
+        print(f"[БЭКАП] Результат отключения: {result}")
         return result
     
     def _get_startup_folder_path(self) -> Path:
