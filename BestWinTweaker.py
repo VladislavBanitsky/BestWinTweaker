@@ -10,6 +10,8 @@ import re
 import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
+import subprocess
+import ctypes
 
 from tkinter import *
 
@@ -18,7 +20,7 @@ import patch_subprocess  # <-- ПЕРВЫМ ИМПОРТОМ
 # Импортируем GPUtil после патча
 import GPUtil
 
-from utilities import blur_window, no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, start_download
+from utilities import blur_window, no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, start_download, get_windows_version
 from uwpremover import *
 from TweakerTools import TweakerTools
 from StartupManager import StartupManager
@@ -469,23 +471,44 @@ class BestWinTweaker:
         
         self.taskmgr_btn = ctk.CTkButton(
             buttons_grid,
-            text="Диспетчер задач",
+            text="Настроить автозагрузку",
             command=self.action_taskmgr,
             width=250,
             height=60,
             font=ctk.CTkFont(size=14)
         )
         self.taskmgr_btn.grid(row=3, column=0, padx=15, pady=15)
+        
+        self.devmgmt_btn = ctk.CTkButton(
+            buttons_grid,
+            text="Диспетчер устройств",
+            command=self.action_devmgmt,
+            width=250,
+            height=60,
+            font=ctk.CTkFont(size=14)
+        )
+        self.devmgmt_btn.grid(row=3, column=1, padx=15, pady=15)
+        
+        self.diskmgmt_btn = ctk.CTkButton(
+            buttons_grid,
+            text="Управление дисками",
+            command=self.action_diskmgmt,
+            width=250,
+            height=60,
+            font=ctk.CTkFont(size=14)
+        )
+        self.diskmgmt_btn.grid(row=3, column=2, padx=15, pady=15)
     
     def action_taskmgr(self):
-        """Открыть диспетчер задач"""
-        import subprocess
-        import ctypes
-        
+        """Открыть диспетчер задач или msconfig на вкладке Автозагрузка"""       
         try:
-            subprocess.Popen('taskmgr', shell=True)
-            self.status_label.configure(text="Диспетчер задач открыт", text_color="green")
-            # Не показываем подсказку, чтобы не раздражать пользователя
+            print(get_windows_version())
+            if get_windows_version() == "7":
+                subprocess.Popen('msconfig', shell=True)
+                self.status_label.configure(text="msconfig открыт", text_color="green")
+            else:  # для Windows 10-11
+                subprocess.Popen('taskmgr', shell=True)
+                self.status_label.configure(text="Диспетчер задач открыт", text_color="green")
         except Exception as e:
             print(f"Ошибка: {e}")
             try:
@@ -511,7 +534,20 @@ class BestWinTweaker:
             time.sleep(0.1)
         
         self.status_label.configure(text="Диспетчер задач открыт на вкладке Автозагрузка", text_color="green")
-
+    
+    def action_devmgmt(self):
+        """Открыть Диспетчер устройств"""
+        try:
+            subprocess.Popen('devmgmt.msc', shell=True)
+        except Exception as e:
+            print(f"Ошибка: {e}")
+    
+    def action_diskmgmt(self):
+        """Открыть Управление дисками"""
+        try:
+            subprocess.Popen('diskmgmt.msc', shell=True)
+        except Exception as e:
+            print(f"Ошибка: {e}")
 
     def action_set_bing_wallpaper(self):
         """Действие по установке обоев с Bing"""
@@ -774,6 +810,13 @@ class BestWinTweaker:
             font=ctk.CTkFont(size=20, weight="bold")
         )
         title_label.pack(side="left")
+        title_beta = ctk.CTkLabel(
+            header_frame,
+            text=" [beta]", 
+            text_color="red",
+            font=ctk.CTkFont(size=20, weight="bold")
+        )
+        title_beta.pack(side="left")
 
         # Кнопки управления
         btn_frame = ctk.CTkFrame(header_frame, fg_color="transparent")

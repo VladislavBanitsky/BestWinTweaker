@@ -86,7 +86,7 @@ class StartupManager:
         cleaned_backup = {}
         for key, data in latest_entries.items():
             # Восстанавливаем оригинальный ключ для обратной совместимости
-            original_key = f"{data['name']}_{data['source'].replace('\\', '_')}"
+            original_key = data['name'] + "_" + data['source'].replace('\\', '_')
             cleaned_backup[original_key] = data
         
         self._save_backup(cleaned_backup)
