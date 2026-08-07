@@ -549,7 +549,6 @@ class BestWinTweaker:
     def action_taskmgr(self):
         """Открыть диспетчер задач или msconfig на вкладке Автозагрузка"""       
         try:
-            print(get_windows_version())
             if get_windows_version() == "7":
                 subprocess.Popen('msconfig', shell=True)
                 self.status_label.configure(text="msconfig открыт", text_color="green")
@@ -1851,7 +1850,7 @@ class BestWinTweaker:
                         print(f"Температура: {gpu.temperature} °C")
                     
                 
-                    filtered_gpus.append(gpu)
+                filtered_gpus.append(gpu)
         
             gpus = filtered_gpus  # Заменяем на отфильтрованный список
             
