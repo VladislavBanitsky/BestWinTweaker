@@ -12,6 +12,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 import subprocess
 import ctypes
+import os
 
 from tkinter import *
 
@@ -498,6 +499,52 @@ class BestWinTweaker:
             font=ctk.CTkFont(size=14)
         )
         self.diskmgmt_btn.grid(row=3, column=2, padx=15, pady=15)
+
+        # Кнопка Massgrave (активация Windows/Office)
+        self.massgrave_btn = ctk.CTkButton(
+            buttons_grid,
+            text="Massgrave (в учебных целях)",
+            command=self.action_massgrave,
+            width=250,
+            height=60,
+            font=ctk.CTkFont(size=14)
+        )
+        self.massgrave_btn.grid(row=4, column=0, columnspan=3, padx=15, pady=15)
+    
+    def action_massgrave(self):
+        """Запуск скрипта Massgrave для активации Windows/Office"""
+
+        if get_windows_version() == "7":
+            messagebox.showinfo("Информация", "Massgrave работает с Windows 10-11")
+            self.status_label.configure(text="Не удалось запустить скрипт Massgrave", text_color="orange")
+            return
+
+        self.status_label.configure(text="Запуск Massgrave...", text_color="orange")
+        self.massgrave_btn.configure(state="disabled")
+        self.window.update()
+        
+        def run_massgrave():
+            try:
+                # Самый надежный способ - через os.system с запуском в новом окне
+                # Используем start, чтобы открыть новое окно cmd
+                os.system('start powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://get.activated.win | iex"')
+                
+                self.window.after(0, lambda: self.status_label.configure(
+                    text="Massgrave запущен в новом окне! Следуйте инструкциям.",
+                    text_color="green"
+                ))
+                
+            except Exception as e:
+                print(f"Ошибка Massgrave: {e}")
+                self.window.after(0, lambda: self.status_label.configure(
+                    text=f"Ошибка: {str(e)[:50]}",
+                    text_color="red"
+                ))
+                messagebox.showerror("Ошибка", f"Не удалось запустить Massgrave:\n{str(e)}")
+            
+            self.window.after(0, lambda: self.massgrave_btn.configure(state="normal"))
+        
+        threading.Thread(target=run_massgrave, daemon=True).start()
     
     def action_taskmgr(self):
         """Открыть диспетчер задач или msconfig на вкладке Автозагрузка"""       
@@ -1793,10 +1840,18 @@ class BestWinTweaker:
                 
                 # Пропускаем встройки
                 if any(keyword in gpu_name for keyword in integrated_keywords):
-                    print(f"Пропускаем встройку: {gpu_name}")
-                    continue
+                    import GPUtil
+                    import time
+
+                    gpus = GPUtil.getGPUs()
+                    if gpus:
+                        gpu = gpus  # Берём первый GPU
+                        print(f"Загрузка: {gpu.load * 100:.2f}%")  # Процент использования вычислительных ресурсов
+                        print(f"Память: {gpu.memoryUsed} / {gpu.memoryTotal} МБ")
+                        print(f"Температура: {gpu.temperature} °C")
+                    
                 
-                filtered_gpus.append(gpu)
+                    filtered_gpus.append(gpu)
         
             gpus = filtered_gpus  # Заменяем на отфильтрованный список
             
