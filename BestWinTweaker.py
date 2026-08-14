@@ -470,16 +470,6 @@ class BestWinTweaker:
         )
         self.ping_btn.grid(row=2, column=2, padx=15, pady=15)
         
-        self.taskmgr_btn = ctk.CTkButton(
-            buttons_grid,
-            text="Настроить автозагрузку",
-            command=self.action_taskmgr,
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
-        )
-        self.taskmgr_btn.grid(row=3, column=0, padx=15, pady=15)
-        
         self.devmgmt_btn = ctk.CTkButton(
             buttons_grid,
             text="Диспетчер устройств",
@@ -488,7 +478,7 @@ class BestWinTweaker:
             height=60,
             font=ctk.CTkFont(size=14)
         )
-        self.devmgmt_btn.grid(row=3, column=1, padx=15, pady=15)
+        self.devmgmt_btn.grid(row=3, column=0, padx=15, pady=15)
         
         self.diskmgmt_btn = ctk.CTkButton(
             buttons_grid,
@@ -498,7 +488,7 @@ class BestWinTweaker:
             height=60,
             font=ctk.CTkFont(size=14)
         )
-        self.diskmgmt_btn.grid(row=3, column=2, padx=15, pady=15)
+        self.diskmgmt_btn.grid(row=3, column=1, padx=15, pady=15)
 
         # Кнопка Massgrave (активация Windows/Office)
         self.massgrave_btn = ctk.CTkButton(
@@ -509,7 +499,7 @@ class BestWinTweaker:
             height=60,
             font=ctk.CTkFont(size=14)
         )
-        self.massgrave_btn.grid(row=4, column=0, columnspan=3, padx=15, pady=15)
+        self.massgrave_btn.grid(row=3, column=2, columnspan=3, padx=15, pady=15)
     
     def action_massgrave(self):
         """Запуск скрипта Massgrave для активации Windows/Office"""
@@ -554,41 +544,6 @@ class BestWinTweaker:
             self.window.after(0, lambda: self.massgrave_btn.configure(state="normal"))
         
         threading.Thread(target=run_massgrave, daemon=True).start()
-    
-    def action_taskmgr(self):
-        """Открыть диспетчер задач или msconfig на вкладке Автозагрузка"""       
-        try:
-            if get_windows_version() == "7":
-                subprocess.Popen('msconfig', shell=True)
-                self.status_label.configure(text="msconfig открыт", text_color="green")
-            else:  # для Windows 10-11
-                subprocess.Popen('taskmgr', shell=True)
-                self.status_label.configure(text="Диспетчер задач открыт", text_color="green")
-        except Exception as e:
-            print(f"Ошибка: {e}")
-            try:
-                os.system('taskmgr')
-            except:
-                self.status_label.configure(text="Не удалось открыть диспетчер задач", text_color="red")
-                messagebox.showerror("Ошибка", "Не удалось открыть диспетчер задач.")
-
-        time.sleep(1)  # Даем время открыться
-
-        # Импортируем функции для симуляции клавиш
-        user32 = ctypes.windll.user32
-        
-        # Нажимаем Ctrl+Tab несколько раз для переключения вкладок
-        # Это работает в любом окне!
-        for _ in range(3):  # 3 раза должно хватить
-            # Ctrl+Tab
-            user32.keybd_event(0x11, 0, 0, 0)  # Ctrl down
-            user32.keybd_event(0x09, 0, 0, 0)  # Tab down
-            time.sleep(0.05)
-            user32.keybd_event(0x09, 0, 2, 0)  # Tab up
-            user32.keybd_event(0x11, 0, 2, 0)  # Ctrl up
-            time.sleep(0.1)
-        
-        self.status_label.configure(text="Диспетчер задач открыт на вкладке Автозагрузка", text_color="green")
     
     def action_devmgmt(self):
         """Открыть Диспетчер устройств"""
