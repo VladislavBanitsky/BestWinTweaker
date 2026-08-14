@@ -515,24 +515,14 @@ class BestWinTweaker:
         
         def run_massgrave():
             try:
-                import subprocess
-                import time
-                import pyperclip  # pip install pyperclip
-
-                # Копируем команду в буфер обмена
-                pyperclip.copy('irm https://get.activated.win | iex')
-
-                # Открываем PowerShell
-                subprocess.Popen(["powershell.exe", "-NoExit"])
-                time.sleep(1.5)
-
-                # Пользователь должен нажать Ctrl+V сам или вы можете использовать pyautogui
-                # Для автоматической вставки:
-                import pyautogui
-                pyautogui.hotkey('ctrl', 'v')  # вставляет команду, но без Enter
-
-                self.status_label.configure(text="Нажмите Enter в PowerShell для выполнения.", text_color="green")
+                # Открываем PowerShell с командой Massgrave
+                cmd = 'powershell.exe -NoExit -Command "irm https://get.activated.win | iex"'
+                subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
                 
+                self.window.after(0, lambda: self.status_label.configure(
+                    text="Massgrave запущен в PowerShell", 
+                    text_color="green"
+                ))
             except Exception as e:
                 print(f"Ошибка Massgrave: {e}")
                 self.window.after(0, lambda: self.status_label.configure(
@@ -540,8 +530,8 @@ class BestWinTweaker:
                     text_color="red"
                 ))
                 messagebox.showerror("Ошибка", f"Не удалось запустить Massgrave:\n{str(e)}")
-            
-            self.window.after(0, lambda: self.massgrave_btn.configure(state="normal"))
+            finally:
+                self.window.after(0, lambda: self.massgrave_btn.configure(state="normal"))
         
         threading.Thread(target=run_massgrave, daemon=True).start()
     
