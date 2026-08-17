@@ -95,6 +95,7 @@ args = [
     "--hidden-import=webbrowser",
     "--hidden-import=patch_subprocess",  # патч для скрытого опроса видеокарты
     "--collect-data=customtkinter",  # Собираем темы customtkinter
+    "--collect-all=tkinter",
     "--collect-all=customtkinter",
     "--uac-admin",                   # Запуск от администратора
     "--clean",                       # Очистка временных файлов
