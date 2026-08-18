@@ -174,8 +174,8 @@ def get_ddr_type():
             ddr_type = 'DDR4 '
         elif 3200 <= speed <= 6400:
             ddr_type = 'DDR5 '
-            
-    return ddr_type + str(speed) +"МГц (" + part_number + ")"
+    
+    return ddr_type + str(speed) +"МГц (" + part_number + ")" if part_number and part_number != "Unknown" else ddr_type + str(speed) +"МГц"
 
 # Функция для получения модели материнской платы      
 def get_board_model():
