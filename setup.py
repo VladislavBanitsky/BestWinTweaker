@@ -93,6 +93,7 @@ args = [
     "--hidden-import=shutil",
     "--hidden-import=tempfile",
     "--hidden-import=webbrowser",
+    "--hidden-import=pyperclip",
     "--hidden-import=patch_subprocess",  # патч для скрытого опроса видеокарты
     "--collect-data=customtkinter",  # Собираем темы customtkinter
     "--collect-all=tkinter",
