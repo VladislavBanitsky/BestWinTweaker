@@ -11,6 +11,7 @@ from tkinter import messagebox
 import subprocess
 import traceback
 import pythoncom
+import platform
 
 from BlurWindow.blurWindow import GlobalBlur
 
@@ -184,7 +185,13 @@ def get_board_model():
     for board in c.Win32_BaseBoard():
         board_brand = board.Manufacturer
         board_model = board.Product  # Модель обычно хранится в Product
-    return board_brand + " " + board_model
+    
+    manufacturer_laptop = c.Win32_ComputerSystem()[0].Manufacturer
+    manufacturer_laptop = manufacturer_laptop + " " if manufacturer_laptop != "System manufacturer" else ""
+    model_laptop = c.Win32_ComputerSystem()[0].Model
+    model_laptop = model_laptop + " " if model_laptop != "System Product Name" else ""
+    
+    return manufacturer_laptop + model_laptop + board_brand + " " + board_model
 
 # Функция для получения модели сетевой карты
 def get_network_adapter_model():

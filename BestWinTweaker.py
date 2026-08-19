@@ -473,7 +473,7 @@ class BestWinTweaker:
         self.devmgmt_btn = ctk.CTkButton(
             buttons_grid,
             text="Диспетчер устройств",
-            command=self.action_devmgmt,
+            command=lambda:self.action_cmd("devmgmt.msc"),
             width=250,
             height=60,
             font=ctk.CTkFont(size=14)
@@ -483,79 +483,27 @@ class BestWinTweaker:
         self.diskmgmt_btn = ctk.CTkButton(
             buttons_grid,
             text="Управление дисками",
-            command=self.action_diskmgmt,
+            command=lambda:self.action_cmd("diskmgmt.msc"),
             width=250,
             height=60,
             font=ctk.CTkFont(size=14)
         )
         self.diskmgmt_btn.grid(row=3, column=1, padx=15, pady=15)
-
-        # Кнопка Massgrave (активация Windows/Office)
-        self.massgrave_btn = ctk.CTkButton(
+        
+        self.taskmgr_btn = ctk.CTkButton(
             buttons_grid,
-            text="Massgrave (в учебных целях)",
-            command=self.action_massgrave,
+            text="Диспетчер задач",
+            command=lambda:self.action_cmd("taskmgr"),
             width=250,
             height=60,
             font=ctk.CTkFont(size=14)
         )
-        self.massgrave_btn.grid(row=3, column=2, columnspan=3, padx=15, pady=15)
+        self.taskmgr_btn.grid(row=3, column=2, padx=15, pady=15)
     
-    def action_massgrave(self):
-        """Запуск скрипта Massgrave для активации Windows/Office"""
-
-        if get_windows_version() == "7":
-            messagebox.showinfo("Информация", "Massgrave работает с Windows 10-11")
-            self.status_label.configure(text="Не удалось запустить скрипт Massgrave", text_color="orange")
-            return
-
-        self.status_label.configure(text="Запуск Massgrave...", text_color="orange")
-        self.massgrave_btn.configure(state="disabled")
-        self.window.update()
-        
-        def run_massgrave():
-            try:
-                import subprocess
-                import time
-                import pyperclip  # pip install pyperclip
-
-                # Копируем команду в буфер обмена
-                pyperclip.copy('irm https://get.activated.win | iex')
-
-                # Открываем PowerShell
-                subprocess.Popen(["powershell.exe", "-NoExit"])
-                time.sleep(1.5)
-
-                # Пользователь должен нажать Ctrl+V сам или вы можете использовать pyautogui
-                # Для автоматической вставки:
-                import pyautogui
-                pyautogui.hotkey('ctrl', 'v')  # вставляет команду, но без Enter
-
-                self.status_label.configure(text="Нажмите Enter в PowerShell для выполнения.", text_color="green")
-                
-            except Exception as e:
-                print(f"Ошибка Massgrave: {e}")
-                self.window.after(0, lambda: self.status_label.configure(
-                    text=f"Ошибка: {str(e)[:50]}",
-                    text_color="red"
-                ))
-                messagebox.showerror("Ошибка", f"Не удалось запустить Massgrave:\n{str(e)}")
-            
-            self.window.after(0, lambda: self.massgrave_btn.configure(state="normal"))
-        
-        threading.Thread(target=run_massgrave, daemon=True).start()
-    
-    def action_devmgmt(self):
+    def action_cmd(self, cmd):
         """Открыть Диспетчер устройств"""
         try:
-            subprocess.Popen('devmgmt.msc', shell=True)
-        except Exception as e:
-            print(f"Ошибка: {e}")
-    
-    def action_diskmgmt(self):
-        """Открыть Управление дисками"""
-        try:
-            subprocess.Popen('diskmgmt.msc', shell=True)
+            subprocess.Popen(cmd, shell=True)
         except Exception as e:
             print(f"Ошибка: {e}")
 
@@ -596,8 +544,6 @@ class BestWinTweaker:
         ping_window.geometry("600x500")
         ping_window.resizable(False, False)
 
-        
-        
         # Центрируем окно
         ping_window.transient(self.window)
         ping_window.grab_set()
@@ -1065,6 +1011,9 @@ class BestWinTweaker:
         print(f"[DEBUG] Переменных: {len(self.autostart_vars)}")
         
         for program in self.autostart_programs:
+            # Получаем name и source из текущей программы
+            name = program.get("display_name", "")
+            source = program.get("source", "")
             
             if program.get("from_backup", False) and program.get("is_deleted", False):
                 # Получаем запись из бэкапа
