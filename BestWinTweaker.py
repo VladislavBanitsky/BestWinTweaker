@@ -76,22 +76,29 @@ class BestWinTweaker:
         self.start_updates()
 
     def _load_copy_icon(self):
-        """Загружает иконку копирования из файла с кешированием"""
-        if self._copy_icon_cache is not None:
+        """Загружает иконку копирования с поддержкой тёмной/светлой темы"""
+        if hasattr(self, '_copy_icon_cache') and self._copy_icon_cache is not None:
             return self._copy_icon_cache
         
         try:
-            icon_path = resource_path('./resources/images/copy.png')
-            img = PILImage.open(icon_path)
-            img = img.resize((20, 20), PILImage.Resampling.LANCZOS)
+            # Загружаем две версии иконки
+            light_icon_path = resource_path('./resources/images/copy.png')
+            dark_icon_path = resource_path('./resources/images/copy_dark.png')
+            
+            light_img = PILImage.open(light_icon_path)
+            dark_img = PILImage.open(dark_icon_path)
+            
+            light_img = light_img.resize((20, 20), PILImage.Resampling.LANCZOS)
+            dark_img = dark_img.resize((20, 20), PILImage.Resampling.LANCZOS)
+            
             self._copy_icon_cache = ctk.CTkImage(
-                light_image=img, 
-                dark_image=img, 
+                light_image=light_img,
+                dark_image=dark_img,
                 size=(20, 20)
             )
             return self._copy_icon_cache
         except Exception as e:
-            print(f"Ошибка загрузки иконки copy.png: {e}")
+            print(f"Ошибка загрузки иконки: {e}")
             return None
     
     def _create_copy_button(self, parent, text_to_copy, tooltip="Копировать"):
@@ -1354,6 +1361,10 @@ class BestWinTweaker:
             ctk.set_appearance_mode("Dark")
             self.theme_switch.configure(text="Темно")
             self.transparent_color = '#1a1a1a'
+        
+        # Очищаем кеш иконок для перезагрузки
+        self._copy_icon_cache = None
+        self._gpu_copy_btns.clear()
     
     def create_cpu_section(self, parent):
         cpu_frame = ctk.CTkFrame(parent)
