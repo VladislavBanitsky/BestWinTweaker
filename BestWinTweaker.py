@@ -55,6 +55,7 @@ class BestWinTweaker:
         self._ram_updating = False
         self._disk_cache = {}
         self._ram_cache = {}
+        self._copy_icon_cache = None
         
         self.autostart_manager = StartupManager()
         print(f"[DEBUG] StartupManager инициализирован")
@@ -74,13 +75,33 @@ class BestWinTweaker:
         self.apply_preloaded_data()  # Применяем предзагруженные данные
         self.start_updates()
 
+    def _load_copy_icon(self):
+        """Загружает иконку копирования из файла с кешированием"""
+        if self._copy_icon_cache is not None:
+            return self._copy_icon_cache
+        
+        try:
+            icon_path = resource_path('./resources/images/copy.png')
+            img = PILImage.open(icon_path)
+            img = img.resize((20, 20), PILImage.Resampling.LANCZOS)
+            self._copy_icon_cache = ctk.CTkImage(
+                light_image=img, 
+                dark_image=img, 
+                size=(20, 20)
+            )
+            return self._copy_icon_cache
+        except Exception as e:
+            print(f"Ошибка загрузки иконки copy.png: {e}")
+            return None
+    
     def _create_copy_button(self, parent, text_to_copy, tooltip="Копировать"):
-        """Создает маленькую кнопку копирования"""
-        import tkinter as tk
+        """Создает кнопку копирования с иконкой"""
+        icon = self._load_copy_icon()
         
         btn = ctk.CTkButton(
             parent,
-            text="📋",
+            image=icon if icon else None,
+            text="" if icon else "Копировать",  # Если нет иконки, показываем текст
             width=30,
             height=25,
             font=ctk.CTkFont(size=12),
@@ -1687,35 +1708,12 @@ class BestWinTweaker:
                     )
                     name_label.pack(side="left")
                     
-                    # Кнопка копирования названия диска
-                    copy_name_btn = ctk.CTkButton(
-                        disk_name_frame,
-                        text="📋",
-                        width=28,
-                        height=24,
-                        font=ctk.CTkFont(size=11),
-                        fg_color="transparent",
-                        hover_color="#3a3a5a",
-                        command=lambda d=device, dt=disk_type_text: 
-                            self._copy_to_clipboard(f"{dt}")
+                    copy_type_btn = self._create_copy_button(
+                        disk_name_frame, 
+                        disk_type_text,
+                        "Копировать тип диска"
                     )
-                    copy_name_btn.pack(side="left", padx=2)
-                    
-                    # Кнопка копирования пути
-                    mount_point = info.get('mount', '')
-                    if mount_point:
-                        copy_path_btn = ctk.CTkButton(
-                            disk_name_frame,
-                            text="📁",
-                            width=28,
-                            height=24,
-                            font=ctk.CTkFont(size=11),
-                            fg_color="transparent",
-                            hover_color="#3a3a5a",
-                            command=lambda m=mount_point: 
-                                self._copy_to_clipboard(m)
-                        )
-                        copy_path_btn.pack(side="left", padx=2)
+                    copy_type_btn.pack(side="left", padx=2)
 
                     progress = ctk.CTkProgressBar(disk_frame, height=20)
                     progress.pack(fill="x", padx=5, pady=2)
