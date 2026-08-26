@@ -1880,11 +1880,10 @@ class BestWinTweaker:
                         print(f"Загрузка: {gpu.load * 100:.2f}%")  # Процент использования вычислительных ресурсов
                         print(f"Память: {gpu.memoryUsed} / {gpu.memoryTotal} МБ")
                         print(f"Температура: {gpu.temperature} °C")
-                    
-                
+                        
                 filtered_gpus.append(gpu)
-        
-            gpus = filtered_gpus  # Заменяем на отфильтрованный список
+            
+            gpus = filtered_gpus
             
             # Проверяем, есть ли данные
             if not gpus or (isinstance(gpus, list) and len(gpus) == 0):
@@ -1893,6 +1892,9 @@ class BestWinTweaker:
                 
                 for widget in self.gpu_container.winfo_children():
                     widget.destroy()
+                self.gpu_widgets.clear()
+                self._gpu_copy_btns.clear()
+                self._gpu_detected = False
                 
                 self.gpu_label = ctk.CTkLabel(
                     self.gpu_container, 
@@ -1902,27 +1904,39 @@ class BestWinTweaker:
                 self.gpu_label.pack(pady=10)
                 return
             
+            # УДАЛЯЕМ СТАРЫЙ ЛЕЙБЛ "Поиск GPU...", если он есть
+            if hasattr(self, 'gpu_label') and self.gpu_label.winfo_exists():
+                self.gpu_label.destroy()
+                delattr(self, 'gpu_label')
+            
             self._gpu_detected = True
             
-            # Удаляем все старые виджеты
-            for widget in self.gpu_container.winfo_children():
-                widget.destroy()
+            # --- НОВАЯ ЛОГИКА: обновляем существующие виджеты или создаем новые ---
             
-            self._gpu_copy_btns.clear()
+            # Получаем текущие виджеты
+            current_widgets = list(self.gpu_widgets.keys())
+            needed_widgets = [f"gpu_{i}" for i in range(len(gpus))]
             
-            # Создаем виджеты для каждого GPU
+            # Удаляем лишние виджеты
+            for widget_id in current_widgets:
+                if widget_id not in needed_widgets:
+                    for widget in self.gpu_widgets[widget_id]:
+                        widget.destroy()
+                    del self.gpu_widgets[widget_id]
+            
+            # Обновляем или создаем виджеты для каждого GPU
             for i, gpu in enumerate(gpus):
                 gpu_id = f"gpu_{i}"
                 
                 # Получаем данные в зависимости от типа объекта
-                if hasattr(gpu, 'name'):  # Объект с атрибутами
+                if hasattr(gpu, 'name'):
                     gpu_name = gpu.name
                     gpu_load = gpu.load * 100 if hasattr(gpu, 'load') else 0
                     gpu_temp = gpu.temperature if hasattr(gpu, 'temperature') else 0
                     gpu_memory_used = gpu.memoryUsed if hasattr(gpu, 'memoryUsed') else 0
                     gpu_memory_total = gpu.memoryTotal if hasattr(gpu, 'memoryTotal') else 0
                     gpu_memory_util = gpu.memoryUtil * 100 if hasattr(gpu, 'memoryUtil') else 0
-                elif isinstance(gpu, dict):  # Словарь
+                elif isinstance(gpu, dict):
                     gpu_name = gpu.get('name', 'Unknown GPU')
                     gpu_load = gpu.get('load', 0)
                     gpu_temp = gpu.get('temperature', 0)
@@ -1932,37 +1946,50 @@ class BestWinTweaker:
                 else:
                     continue
                 
-                gpu_card_frame = ctk.CTkFrame(self.gpu_container)
-                gpu_card_frame.pack(fill="x", pady=3)
+                if gpu_id not in self.gpu_widgets:
+                    # Создаем новый виджет
+                    gpu_card_frame = ctk.CTkFrame(self.gpu_container)
+                    gpu_card_frame.pack(fill="x", pady=3)
+                    
+                    # Строка с названием GPU и кнопкой копирования
+                    gpu_name_frame = ctk.CTkFrame(gpu_card_frame, fg_color="transparent")
+                    gpu_name_frame.pack(anchor="w", padx=10, pady=(5, 0), fill="x")
+                    
+                    name_label = ctk.CTkLabel(
+                        gpu_name_frame, 
+                        text=gpu_name,
+                        font=ctk.CTkFont(size=16, weight="bold")
+                    )
+                    name_label.pack(side="left")
+                    
+                    copy_gpu_btn = self._create_copy_button(gpu_name_frame, gpu_name)
+                    copy_gpu_btn.pack(side="left", padx=5)
+                    
+                    load_progress = ctk.CTkProgressBar(gpu_card_frame, height=20)
+                    load_progress.pack(fill="x", padx=10, pady=5)
+                    
+                    info_label = ctk.CTkLabel(
+                        gpu_card_frame, 
+                        text="",
+                        font=ctk.CTkFont(size=14)
+                    )
+                    info_label.pack(anchor="w", padx=10, pady=(0, 5))
+                    
+                    self.gpu_widgets[gpu_id] = [gpu_card_frame, name_label, load_progress, info_label]
+                else:
+                    # Обновляем существующий виджет
+                    gpu_card_frame, name_label, load_progress, info_label = self.gpu_widgets[gpu_id]
+                    
+                    # Обновляем имя (на случай, если оно изменилось)
+                    name_label.configure(text=gpu_name)
+                    
+                    # Обновляем кнопку копирования
+                    if gpu_id in self._gpu_copy_btns:
+                        self._gpu_copy_btns[gpu_id].configure(command=lambda: self._copy_to_clipboard(gpu_name))
                 
-                # Строка с названием GPU и кнопкой копирования
-                gpu_name_frame = ctk.CTkFrame(gpu_card_frame, fg_color="transparent")
-                gpu_name_frame.pack(anchor="w", padx=10, pady=(5, 0), fill="x")
+                # Обновляем данные ВНЕ зависимости от того, создан виджет или обновлен
+                _, _, load_progress, info_label = self.gpu_widgets[gpu_id]
                 
-                name_label = ctk.CTkLabel(
-                    gpu_name_frame, 
-                    text=gpu_name,
-                    font=ctk.CTkFont(size=16, weight="bold")
-                )
-                name_label.pack(side="left")
-                
-                copy_gpu_btn = self._create_copy_button(gpu_name_frame, gpu_name)
-                copy_gpu_btn.pack(side="left", padx=5)
-                self._gpu_copy_btns[gpu_id] = copy_gpu_btn
-                
-                load_progress = ctk.CTkProgressBar(gpu_card_frame, height=20)
-                load_progress.pack(fill="x", padx=10, pady=5)
-                
-                info_label = ctk.CTkLabel(
-                    gpu_card_frame, 
-                    text="",
-                    font=ctk.CTkFont(size=14)
-                )
-                info_label.pack(anchor="w", padx=10, pady=(0, 5))
-                
-                self.gpu_widgets[gpu_id] = [gpu_card_frame, name_label, load_progress, info_label]
-                
-                # Обновляем данные
                 load_progress.set(gpu_load / 100 if gpu_load > 0 else 0)
                 
                 if gpu_memory_total > 0:
@@ -1972,7 +1999,7 @@ class BestWinTweaker:
                     info_text = f"Загрузка: {gpu_load:.1f}% | Температура: {gpu_temp:.0f}°C"
                 
                 info_label.configure(text=info_text)
-                    
+                        
         except Exception as e:
             print(f"GPU UI update error: {e}")
             import traceback
