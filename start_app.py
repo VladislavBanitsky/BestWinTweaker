@@ -5,6 +5,8 @@ import time
 from splash_screen import SplashScreen
 from data_loader import DataLoader
 
+from ConfigManager import ConfigManager
+
 class AppLauncher:
     """Класс для запуска приложения с заставкой и фоновой загрузкой"""
     
@@ -14,9 +16,13 @@ class AppLauncher:
         self.loaded_data = None
         
     def start(self):
-        """Запуск процесса загрузки"""      
+        """Запуск процесса загрузки"""   
+        # Загружаем сохраненную тему
+        config_manager = ConfigManager()
+        saved_theme = config_manager.get_theme()
+        
         # Создаем заставку
-        self.splash = SplashScreen()
+        self.splash = SplashScreen(theme=saved_theme)
         
         # Запускаем загрузку данных в отдельном потоке
         loading_thread = threading.Thread(target=self.load_data_in_background)
