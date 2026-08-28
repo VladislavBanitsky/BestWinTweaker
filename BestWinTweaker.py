@@ -25,6 +25,7 @@ from utilities import blur_window, no_show_gpu, get_disk_type, get_ddr_info, get
 from uwpremover import *
 from TweakerTools import TweakerTools
 from StartupManager import StartupManager
+from ConfigManager import ConfigManager
 
 # Настройка внешнего вида customtkinter
 ctk.set_appearance_mode("light")
@@ -44,6 +45,13 @@ class BestWinTweaker:
         self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
         
         blur_window(self.window)
+        
+        # Инициализация менеджера конфигурации
+        self.config_manager = ConfigManager()
+        
+        # Загружаем сохраненную тему
+        saved_theme = self.config_manager.get_theme()
+        ctk.set_appearance_mode(saved_theme)
         
         # Переменные для обновления
         self.running = True
@@ -1344,7 +1352,15 @@ class BestWinTweaker:
             switch_height=20
         )
         self.theme_switch.pack(side="left", padx=5)
-        self.theme_switch.select()
+        
+        # Устанавливаем состояние переключателя в соответствии с сохраненной темой
+        current_theme = ctk.get_appearance_mode()
+        if current_theme == "Dark":
+            self.theme_switch.deselect()
+            self.theme_switch.configure(text="Темно")
+        else:
+            self.theme_switch.select()
+            self.theme_switch.configure(text="Светло")
 
         sys_info = ctk.CTkLabel(header,
                                 text=f"{platform.system()} {platform.release()} | {platform.machine()}",
@@ -1355,12 +1371,19 @@ class BestWinTweaker:
         current_theme = ctk.get_appearance_mode()
         
         if current_theme == "Dark":
+            new_theme = "Light"
             ctk.set_appearance_mode("Light")
             self.theme_switch.configure(text="Светло")
+            self.theme_switch.select()
         else:
+            new_theme = "Dark"
             ctk.set_appearance_mode("Dark")
             self.theme_switch.configure(text="Темно")
+            self.theme_switch.deselect()
             self.transparent_color = '#1a1a1a'
+        
+        # Сохраняем тему
+        self.config_manager.set_theme(new_theme)
         
         # Очищаем кеш иконок для перезагрузки
         self._copy_icon_cache = None
