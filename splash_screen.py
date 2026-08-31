@@ -42,30 +42,30 @@ class SplashScreen:
         center_frame = ctk.CTkFrame(main_frame, fg_color='transparent')
         center_frame.place(relx=0.5, rely=0.5, anchor='center')
         
-        # Логотип
-        try:
-            img = Image.open(resource_path('./resources/images/BestWinTweaker.png'))
-            desired_size = (100, 100)
-            img = img.resize(desired_size, Image.Resampling.LANCZOS)
-            self.logo = ctk.CTkImage(light_image=img, dark_image=img, size=desired_size)
-            logo_label = ctk.CTkLabel(center_frame, image=self.logo, text="")
-            logo_label.image = self.logo
-            logo_label.pack(pady=(0, 20))
-        except:
-            logo_label = ctk.CTkLabel(
-                center_frame,
-                text="BestWinTweaker",
-                font=('Segoe UI', 28, 'bold'),
-                text_color='#00b4d8'
-            )
-            logo_label.pack(pady=(0, 10))
-            
-            ctk.CTkLabel(
-                center_frame,
-                text="Системный монитор и оптимизатор",
-                font=('Segoe UI', 14),
-                text_color='gray'
-            ).pack(pady=(0, 25))
+        # Логотип и название
+
+        img = Image.open(resource_path('./resources/images/BestWinTweaker.png'))
+        desired_size = (100, 100)
+        img = img.resize(desired_size, Image.Resampling.LANCZOS)
+        self.logo = ctk.CTkImage(light_image=img, dark_image=img, size=desired_size)
+        logo_label = ctk.CTkLabel(center_frame, image=self.logo, text="")
+        logo_label.image = self.logo
+        logo_label.pack(pady=(0, 20))
+
+        name_label = ctk.CTkLabel(
+            center_frame,
+            text="BestWinTweaker",
+            font=('Segoe UI', 28, 'bold'),
+            text_color='#00b4d8'
+        )
+        name_label.pack()
+        
+        ctk.CTkLabel(
+            center_frame,
+            text="Системный монитор и оптимизатор",
+            font=('Segoe UI', 14),
+            text_color='gray'
+        ).pack()
         
         # Прогресс бар
         self.progress = ctk.CTkProgressBar(
@@ -84,7 +84,7 @@ class SplashScreen:
             font=('Segoe UI', 11),
             text_color='gray'
         )
-        self.status_label.pack(pady=(8, 12))
+        self.status_label.pack()
         
         # Версия
         ctk.CTkLabel(
