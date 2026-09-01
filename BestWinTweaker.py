@@ -26,6 +26,7 @@ from uwpremover import *
 from TweakerTools import TweakerTools
 from StartupManager import StartupManager
 from ConfigManager import ConfigManager
+from StatusManager import StatusManager
 
 # Настройка внешнего вида customtkinter
 ctk.set_appearance_mode("light")
@@ -46,7 +47,7 @@ class BestWinTweaker:
         
         blur_window(self.window)
         
-        # Инициализация менеджера конфигурации
+        # Инициализация менеджеров
         self.config_manager = ConfigManager()
         
         # Загружаем сохраненную тему
@@ -132,11 +133,19 @@ class BestWinTweaker:
             self.window.clipboard_clear()
             self.window.clipboard_append(str(text))
             self.window.update()
-            self.status_label.configure(text=f"Скопировано: {text[:50]}{'...' if len(text) > 50 else ''}", text_color="green")
-            # Возвращаем статус через 2 секунды
-            self.window.after(2000, lambda: self.status_label.configure(text="Готов", text_color="gray"))
+            self.status_manager.set_status(
+                f"Скопировано: {text[:50]}{'...' if len(text) > 50 else ''}", 
+                "green", 
+                priority=1,
+                timeout=2000
+            )
         except Exception as e:
-            self.status_label.configure(text=f"Ошибка копирования: {e}", text_color="red")
+            self.status_manager.set_status(
+                f"Ошибка копирования: {e}", 
+                "red", 
+                priority=2,
+                timeout=3000
+            )
 
     
     def apply_preloaded_data(self):
@@ -269,7 +278,7 @@ class BestWinTweaker:
         for widget in self.uwp_container.winfo_children():
             widget.destroy()
         
-        self.status_label.configure(text="Загрузка списка приложений...", text_color="orange")
+        self.status_manager.set_status(text="Загрузка списка приложений...", color="orange", priority=1)
         self.refresh_uwp_btn.configure(state="disabled")
         
         def load_in_thread():
@@ -283,7 +292,7 @@ class BestWinTweaker:
                 
             except Exception as e:
                 error_msg = f"Ошибка: {str(e)}"
-                self.window.after(0, lambda: self.status_label.configure(text=error_msg, text_color="red"))
+                self.window.after(0, lambda: self.status_manager.set_status(text=error_msg, color="red", priority=2, timeout=5000))
                 self.window.after(0, lambda: self.refresh_uwp_btn.configure(state="normal"))
         
         # Запускаем в потоке
@@ -305,13 +314,14 @@ class BestWinTweaker:
                 text_color="gray"
             )
             empty_label.pack(pady=50)
+            self.status_manager.set_status(text="Не найдено приложений для удаления", color="orange", priority=1, timeout=1000)
             self.refresh_uwp_btn.configure(state="normal")
             return
         
         # Статистика
         safe_count = sum(1 for app in self.uwp_apps if app['is_safe'])
         stats_text = f"Найдено: {len(self.uwp_apps)} | Можно удалить: {safe_count}"
-        self.status_label.configure(text=stats_text, text_color="green")
+        self.status_manager.set_status(text=stats_text, color="green", priority=1, timeout=3000)
         
         # Отображаем каждое приложение
         for app in self.uwp_apps:
@@ -379,7 +389,7 @@ class BestWinTweaker:
         if not messagebox.askyesno("Подтверждение", f"Удалить '{app_name}'?\n\nЭто действие нельзя отменить."):
             return
         
-        self.status_label.configure(text=f"Удаление {app_name}...", text_color="orange")
+        self.status_manager.set_status(text=f"Удаление {app_name}...", color="orange", priority=1)
         self.refresh_uwp_btn.configure(state="disabled")
         
         def remove_thread():
@@ -387,11 +397,11 @@ class BestWinTweaker:
             
             def update_ui():
                 if success:
-                    self.status_label.configure(text=f"✓ {app_name} удалено", text_color="green")
+                    self.status_manager.set_status(f"✓ {app_name} удалено", "green", priority=1, timeout=3000)
                     # Обновляем список
                     self.load_uwp_apps()
                 else:
-                    self.status_label.configure(text=f"✗ Ошибка при удалении {app_name}", text_color="red")
+                    self.status_manager.set_status(f"✗ Ошибка при удалении {app_name}", "red", priority=2, timeout=5000)
                     self.refresh_uwp_btn.configure(state="normal")
             
             self.window.after(0, update_ui)
@@ -518,7 +528,7 @@ class BestWinTweaker:
         )
         
         # Новая кнопка для установки обоев Bing
-        create_tool_button(
+        self.bing_btn = create_tool_button(
             buttons_grid,
             "Установить обои Bing",
             self.action_set_bing_wallpaper,
@@ -577,7 +587,7 @@ class BestWinTweaker:
         """Действие по установке обоев с Bing"""
         # Блокируем кнопку, чтобы не было множественных нажатий
         self.bing_btn.configure(state="disabled")
-        self.status_label.configure(text="Загрузка и установка обоев Bing...", text_color="orange")
+        self.status_manager.set_status("Загрузка и установка обоев Bing...", "orange", priority=1)
         self.window.update()
 
         def set_wallpaper_thread():
@@ -591,9 +601,9 @@ class BestWinTweaker:
             def update_ui():
                 self.bing_btn.configure(state="normal")
                 if success:
-                    self.status_label.configure(text=message, text_color="green")
+                    self.status_manager.set_status(message, "green", priority=1, timeout=5000)
                 else:
-                    self.status_label.configure(text=message, text_color="red")
+                    self.status_manager.set_status(message, "red", priority=2, timeout=5000)
             
             self.window.after(0, update_ui)
 
@@ -896,6 +906,8 @@ class BestWinTweaker:
         for widget in self.autostart_container.winfo_children():
             widget.destroy()
         
+        self.status_manager.set_status("Загрузка программ автозагрузки...", "orange", priority=1)
+        
         # Получаем записи через StartupManager (с бэкапом)
         entries, backup_entries = self.autostart_manager.get_startup_entries_with_backup()
         self.backup_entries = backup_entries
@@ -965,7 +977,7 @@ class BestWinTweaker:
                 text_color="gray"
             )
             empty_label.pack(pady=50)
-            self.status_label.configure(text="Программы не найдены")
+            self.status_manager.set_status("Программы не найдены", "gray", priority=0)
             return
         
         # Создаем виджеты для всех программ
@@ -1054,8 +1066,13 @@ class BestWinTweaker:
         backup_only_count = sum(1 for p in self.autostart_programs if p.get("from_backup", False) and not p["enabled"])
         deleted_count = sum(1 for p in self.autostart_programs if p.get("is_deleted", False))
         
-        # Устанавливаем статус "Готово"
-        self.status_label.configure(text="Готово", text_color="gray")
+        # Показываем статистику
+        stats_text = f"Всего: {total_count} | Включено: {enabled_count} | Из бэкапа: {backup_only_count}"
+        if deleted_count > 0:
+            stats_text += f" | Удалено: {deleted_count}"
+        
+        self.status_manager.set_status(stats_text, "orange", priority=1, timeout=1000)
+        self.refresh_autostart_btn.configure(state="normal")
     
     def apply_autostart_changes(self):
         """Применить изменения автозагрузки используя StartupManager с бэкапом"""
@@ -1085,10 +1102,10 @@ class BestWinTweaker:
                     success = self.autostart_manager.restore_from_backup(name, source)
                 
                 if success:
-                    self.status_label.configure(text=f"'{name}' восстановлена!", text_color="green")
+                    self.status_manager.set_status(f"'{name}' восстановлена!", "green", priority=1, timeout=3000)
                     self.load_autostart_programs()
                 else:
-                    self.status_label.configure(text=f"Не удалось восстановить '{name}'", text_color="red")
+                    self.status_manager.set_status(f"Не удалось восстановить '{name}'", "red", priority=2, timeout=5000)
                     messagebox.showerror("Ошибка", f"Не удалось восстановить '{name}'.\n\nПроверьте, что файл существует.")
             
             key = self.get_program_key(program)
@@ -1165,22 +1182,19 @@ class BestWinTweaker:
             if len(changes_details) > 10:
                 details_text += f"\n... и еще {len(changes_details) - 10} изменений"
             
-            self.status_label.configure(
-                text=f"Изменено программ: {changes_count}. Бэкап {self.autostart_manager._backup_file}",
-                text_color="green"
-            )
+            self.status_manager.set_status(f"Изменено программ: {changes_count}", "green", priority=1, timeout=5000)
             self.load_autostart_programs()
         else:
             if changes_details:
                 error_details = "\n".join([d for d in changes_details if "не удалось" in d])
                 if error_details:
-                    self.status_label.configure(text="Некоторые изменения не удались", text_color="orange")
+                    self.status_manager.set_status("Некоторые изменения не удались", "orange", priority=1, timeout=5000)
                     messagebox.showwarning("Предупреждение", f"Не удалось изменить некоторые программы:\n\n{error_details}")
                 else:
-                    self.status_label.configure(text="Изменений не было", text_color="gray")
+                    self.status_manager.set_status("Изменений не было", "gray", priority=0)
                     messagebox.showinfo("Информация", "Изменений не было")
             else:
-                self.status_label.configure(text="Изменений не было", text_color="gray")
+                self.status_manager.set_status("Изменений не было", "gray", priority=0)
                 messagebox.showinfo("Информация", "Изменений не было")
 
     def get_program_key(self, program):
@@ -1207,70 +1221,69 @@ class BestWinTweaker:
 
     def action_clear_temp(self):
         """Очистка временных файлов"""
-        self.status_label.configure(text="Очистка временных файлов...", text_color="orange")
+        self.status_manager.set_status("Очистка временных файлов...", "orange", priority=1)
         self.window.update()
 
         deleted, error = TweakerTools.clear_temp()
 
         if error:
-            self.status_label.configure(text=f"Ошибка: {error}", text_color="red")
+            self.status_manager.set_status(f"Ошибка: {error}", "red", priority=2, timeout=5000)
             messagebox.showerror("Ошибка", f"Не удалось очистить временные файлы:\n{error}")
         else:
-            self.status_label.configure(text=f"Очищено {deleted} файлов", text_color="green")
+            self.status_manager.set_status(f"Очищено {deleted} файлов", "green", priority=1, timeout=3000)
 
     def action_disable_telemetry(self):
         """Отключение телеметрии"""
-        self.status_label.configure(text="Отключение служб телеметрии...", text_color="orange")
+        self.status_manager.set_status("Отключение служб телеметрии...", "orange", priority=1)
         self.window.update()
 
         disabled, errors = TweakerTools.disable_telemetry_services()
 
         if errors:
-            self.status_label.configure(text=f"Отключено {disabled} из {disabled + len(errors)} служб",
-                                                 text_color="orange")
+            self.status_manager.set_status(f"Отключено {disabled} из {disabled + len(errors)} служб", "orange", priority=1, timeout=5000)
             messagebox.showwarning("Предупреждение",
                                    f"Отключено {disabled} служб.\nНе удалось отключить: {', '.join(errors)}")
         else:
-            self.status_label.configure(text=f"Отключено {disabled} служб телеметрии", text_color="green")
+            self.status_manager.set_status(f"Отключено {disabled} служб телеметрии", "green", priority=1, timeout=3000)
 
     def action_flush_dns(self):
         """Очистка DNS"""
-        self.status_label.configure(text="Очистка DNS кэша...", text_color="orange")
+        self.status_manager.set_status("Очистка DNS кэша...", "orange", priority=1)
         self.window.update()
 
         success, error = TweakerTools.flush_dns()
 
         if success:
-            self.status_label.configure(text="DNS кэш очищен", text_color="green")
+            self.status_manager.set_status("DNS кэш очищен", "green", priority=1, timeout=3000)
         else:
-            self.status_label.configure(text="Ошибка очистки DNS", text_color="red")
+            self.status_manager.set_status("Ошибка очистки DNS", "red", priority=2, timeout=5000)
             messagebox.showerror("Ошибка", f"Не удалось очистить DNS кэш:\n{error}")
 
     def action_fix_updates(self):
         """Исправление обновлений"""
-        self.status_label.configure(text="Исправление ошибок обновлений...", text_color="orange")
+        self.status_manager.set_status("Исправление ошибок обновлений...", "orange", priority=1)
         self.window.update()
 
         success, error = TweakerTools.fix_updates()
 
         if success:
-            self.status_label.configure(text="Запущена проверка Центр обновлений Windows", text_color="green")
+            self.status_manager.set_status("Запущена проверка Центр обновлений Windows", "green", priority=1, timeout=3000)
         else:
-            self.status_label.configure(text="Ошибка при исправлении", text_color="red")
+            self.status_manager.set_status("Ошибка при исправлении", "red", priority=2, timeout=5000)
             messagebox.showerror("Ошибка", f"Не удалось исправить ошибки обновлений:\n{error}")
 
     def action_toggle_indexing(self):
         """Переключение индексации"""
         if TweakerTools.is_indexing_enabled():
-            self.status_label.configure(text="Отключение индексации...", text_color="orange")
+            self.status_manager.set_status("Отключение индексации...", "orange", priority=1)
             self.window.update()
             TweakerTools.disable_indexing()
-            self.status_label.configure(text="Индексация дисков отключена", text_color="green")
+            self.status_manager.set_status("Индексация дисков отключена", "green", priority=1, timeout=3000)
         else:
-            self.status_label.configure(text="Включение индексации...", text_color="orange")
+            self.status_manager.set_status("Включение индексации...", "orange", priority=1)
             self.window.update()
             TweakerTools.enable_indexing()
-            self.status_label.configure(text="Индексация дисков включена", text_color="green")
+            self.status_manager.set_status("Индексация дисков включена", "green", priority=1, timeout=3000)
 
         self.update_indexing_button_text()
 
@@ -1289,7 +1302,7 @@ class BestWinTweaker:
         ):
             return
         
-        self.status_label.configure(text="Удаление водяного знака сборки...", text_color="orange")
+        self.status_manager.set_status("Удаление водяного знака сборки...", "orange", priority=1)
         self.remove_watermark_btn.configure(state="disabled")
         self.window.update()
         
@@ -1299,14 +1312,18 @@ class BestWinTweaker:
             def update_ui():
                 self.remove_watermark_btn.configure(state="normal")
                 if success:
-                    self.status_label.configure(
-                        text="✓ Водяной знак удален! Проводник перезапущен.", 
-                        text_color="green"
+                    self.status_manager.set_status(
+                        "✓ Водяной знак удален! Проводник перезапущен.", 
+                        "green", 
+                        priority=1, 
+                        timeout=3000
                     )
                 else:
-                    self.status_label.configure(
-                        text=f"✗ Ошибка: {error if error else 'Неизвестная ошибка'}", 
-                        text_color="red"
+                    self.status_manager.set_status(
+                        f"✗ Ошибка: {error if error else 'Неизвестная ошибка'}", 
+                        "red", 
+                        priority=2, 
+                        timeout=5000
                     )
                     messagebox.showerror(
                         "Ошибка",
@@ -1602,6 +1619,7 @@ class BestWinTweaker:
             text_color="gray"
         )
         self.status_label.pack(side="left", padx=20)
+        self.status_manager = StatusManager(self.status_label)
 
     def update_stats(self):
         while self.running:
@@ -2028,10 +2046,10 @@ class BestWinTweaker:
     def set_status_hover(self, text, is_hover=True):
         """Устанавливает статус при наведении на кнопку"""
         if is_hover:
-            self.status_label.configure(text=text, text_color="orange")
+            self.status_manager.show_hover(text, delay=200)
         else:
             # Восстанавливаем статус "Готово"
-            self.status_label.configure(text="Готово", text_color="gray")
+            self.status_manager.hide_hover()
     
     def start_updates(self):
         """Запуск всех потоков обновления"""
