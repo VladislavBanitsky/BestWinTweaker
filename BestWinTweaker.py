@@ -198,7 +198,10 @@ class BestWinTweaker:
         # Создание вкладок
         self.tabview = ctk.CTkTabview(self.main_container)
         self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
-
+        
+        # Нижняя панель
+        self.create_footer()
+        
         # Вкладка мониторинга
         self.monitor_tab = self.tabview.add("Мониторинг")
         self.setup_monitor_tab()
@@ -219,12 +222,9 @@ class BestWinTweaker:
         self.about_tab = self.tabview.add("О программе")
         self.setup_about_tab()
 
-        # Нижняя панель
-        self.create_footer()
         self.load_autostart_programs()
         self.load_uwp_apps()
         
-
     def setup_uwp_tab(self):
         """Настройка вкладки управления UWP-приложениями"""
         # Создаем экземпляр класса удаления
@@ -305,7 +305,6 @@ class BestWinTweaker:
                 text_color="gray"
             )
             empty_label.pack(pady=50)
-            self.status_label.configure(text="Приложения не найдены")
             self.refresh_uwp_btn.configure(state="normal")
             return
         
@@ -417,6 +416,8 @@ class BestWinTweaker:
         self.create_network_section(right_column)
         self.create_disk_section(right_column)
 
+    # В методе setup_optimize_tab замените создание кнопок на следующий код:
+
     def setup_optimize_tab(self):
         """Настройка вкладки оптимизации"""
         # Контейнер для кнопок
@@ -431,53 +432,64 @@ class BestWinTweaker:
         )
         title_label.pack(pady=(0, 20))
 
-        # Фрейм для кнопок (сетка 2x3)
+        # Фрейм для кнопок (сетка 4x3)
         buttons_grid = ctk.CTkFrame(buttons_container)
         buttons_grid.pack(expand=True)
 
+        # Вспомогательная функция для создания кнопки с подсказкой
+        def create_tool_button(parent, text, command, tooltip, row, col, **kwargs):
+            btn = ctk.CTkButton(
+                parent,
+                text=text,
+                command=command,
+                width=250,
+                height=60,
+                font=ctk.CTkFont(size=14),
+                **kwargs
+            )
+            btn.grid(row=row, column=col, padx=15, pady=15)
+            
+            # Привязываем события наведения
+            btn.bind("<Enter>", lambda e, t=tooltip: self.set_status_hover(t, True))
+            btn.bind("<Leave>", lambda e: self.set_status_hover("", False))
+            
+            return btn
+
         # Кнопка очистки временных файлов
-        self.clear_temp_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Очистить временные файлы",
-            command=self.action_clear_temp,
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Очистить временные файлы",
+            self.action_clear_temp,
+            "Удаляет временные файлы Windows для освобождения места на диске",
+            0, 0
         )
-        self.clear_temp_btn.grid(row=0, column=0, padx=15, pady=15)
 
         # Кнопка отключения телеметрии
-        self.disable_telemetry_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Отключить службы телеметрии",
-            command=self.action_disable_telemetry,
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Отключить службы телеметрии",
+            self.action_disable_telemetry,
+            "Отключает сбор данных о вашей активности в Windows",
+            0, 1
         )
-        self.disable_telemetry_btn.grid(row=0, column=1, padx=15, pady=15)
 
         # Кнопка очистки DNS
-        self.flush_dns_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Очистить DNS кэш",
-            command=self.action_flush_dns,
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Очистить DNS кэш",
+            self.action_flush_dns,
+            "Очищает кэш DNS для решения проблем с доступом к сайтам",
+            1, 0
         )
-        self.flush_dns_btn.grid(row=1, column=0, padx=15, pady=15)
 
         # Кнопка исправления обновлений
-        self.fix_updates_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Исправить ошибки обновлений",
-            command=self.action_fix_updates,
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Исправить ошибки обновлений",
+            self.action_fix_updates,
+            "Восстанавливает службы Windows Update и очищает кэш обновлений",
+            1, 1
         )
-        self.fix_updates_btn.grid(row=1, column=1, padx=15, pady=15)
 
         # Кнопка управления индексацией
         self.indexing_btn_text = ctk.StringVar()
@@ -492,78 +504,67 @@ class BestWinTweaker:
             font=ctk.CTkFont(size=14)
         )
         self.indexing_btn.grid(row=2, column=0, padx=15, pady=15)
+        self.indexing_btn.bind("<Enter>", lambda e: self.set_status_hover(
+            "Включает или отключает индексацию файлов для быстрого поиска", True))
+        self.indexing_btn.bind("<Leave>", lambda e: self.set_status_hover("", False))
 
         # Кнопка скачивания Windows
-        self.open_temp_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Скачать Windows",
-            command=self.action_win_download,
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Скачать Windows",
+            self.action_win_download,
+            "Открывает инструмент для скачивания официального ISO-образа Windows",
+            2, 1
         )
-        self.open_temp_btn.grid(row=2, column=1, padx=15, pady=15)
         
         # Новая кнопка для установки обоев Bing
-        self.bing_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Установить обои Bing",
-            command=self.action_set_bing_wallpaper,
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Установить обои Bing",
+            self.action_set_bing_wallpaper,
+            "Загружает и устанавливает на рабочий стол ежедневное фото от Bing",
+            0, 2
         )
-        self.bing_btn.grid(row=0, column=2, columnspan=2, padx=15, pady=15)
         
-        self.remove_watermark_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Удалить водяной знак сборки",
-            command=self.action_remove_watermark,
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Удалить водяной знак сборки",
+            self.action_remove_watermark,
+            "Удаляет надписи о сборке и/или активации Windows",
+            1, 2
         )
-        self.remove_watermark_btn.grid(row=1, column=2, columnspan=2, padx=15, pady=15)
         
-        self.ping_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Проверить пинг",
-            command=self.action_ping,
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Проверить пинг",
+            self.action_ping,
+            "Проверяет доступность IP-адреса или домена и время ответа",
+            2, 2
         )
-        self.ping_btn.grid(row=2, column=2, padx=15, pady=15)
         
-        self.devmgmt_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Диспетчер устройств",
-            command=lambda:self.action_cmd("devmgmt.msc"),
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Диспетчер устройств",
+            lambda: self.action_cmd("devmgmt.msc"),
+            "Открывает оснастку для управления оборудованием компьютера",
+            3, 0
         )
-        self.devmgmt_btn.grid(row=3, column=0, padx=15, pady=15)
         
-        self.diskmgmt_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Управление дисками",
-            command=lambda:self.action_cmd("diskmgmt.msc"),
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Управление дисками",
+            lambda: self.action_cmd("diskmgmt.msc"),
+            "Открывает оснастку для управления разделами жестких дисков",
+            3, 1
         )
-        self.diskmgmt_btn.grid(row=3, column=1, padx=15, pady=15)
         
-        self.taskmgr_btn = ctk.CTkButton(
+        create_tool_button(
             buttons_grid,
-            text="Диспетчер задач",
-            command=lambda:self.action_cmd("taskmgr"),
-            width=250,
-            height=60,
-            font=ctk.CTkFont(size=14)
+            "Диспетчер задач",
+            lambda: self.action_cmd("taskmgr"),
+            "Открывает диспетчер задач для просмотра и управления процессами",
+            3, 2
         )
-        self.taskmgr_btn.grid(row=3, column=2, padx=15, pady=15)
     
     def action_cmd(self, cmd):
         """Открыть Диспетчер устройств"""
@@ -784,7 +785,6 @@ class BestWinTweaker:
         
         threading.Thread(target=ping_thread, daemon=True).start()
     
-    
     def setup_about_tab(self):
         """Настройка вкладки О программе"""
         # Заголовок
@@ -883,15 +883,6 @@ class BestWinTweaker:
             width=120
         )
         self.deselect_all_btn.pack(side="left", padx=5)
-
-        # Статус
-        self.status_label = ctk.CTkLabel(
-            self.autostart_tab,
-            text="Загрузка списка программ...",
-            font=ctk.CTkFont(size=12),
-            text_color="gray"
-        )
-        self.status_label.pack(pady=(0, 10))
         
         # Инициализация
         self.autostart_programs = []
@@ -1029,7 +1020,7 @@ class BestWinTweaker:
             if program.get("from_backup", False) and not program["enabled"]:
                 backup_label = ctk.CTkLabel(
                     program_frame,
-                    text="📋 Из бэкапа",
+                    text="Из бэкапа",
                     text_color="blue",
                     font=ctk.CTkFont(size=10)
                 )
@@ -1039,7 +1030,7 @@ class BestWinTweaker:
             if program.get("is_deleted", False):
                 deleted_label = ctk.CTkLabel(
                     program_frame,
-                    text="🗑 Удалена",
+                    text="Удалена",
                     text_color="red",
                     font=ctk.CTkFont(size=10, weight="bold")
                 )
@@ -1063,9 +1054,8 @@ class BestWinTweaker:
         backup_only_count = sum(1 for p in self.autostart_programs if p.get("from_backup", False) and not p["enabled"])
         deleted_count = sum(1 for p in self.autostart_programs if p.get("is_deleted", False))
         
-        self.status_label.configure(
-            text=f"Всего: {total_count} (✅ Включено: {enabled_count}, ❌ Отключено: {total_count - enabled_count}) | 📋 Из бэкапа: {backup_only_count} | 🗑 Удалено: {deleted_count}"
-        )             
+        # Устанавливаем статус "Готово"
+        self.status_label.configure(text="Готово", text_color="gray")
     
     def apply_autostart_changes(self):
         """Применить изменения автозагрузки используя StartupManager с бэкапом"""
@@ -2034,7 +2024,15 @@ class BestWinTweaker:
             self.time_label.configure(text=f"{current_time_str}")
         except Exception as e:
             print(f"Time update error: {e}")
-
+    
+    def set_status_hover(self, text, is_hover=True):
+        """Устанавливает статус при наведении на кнопку"""
+        if is_hover:
+            self.status_label.configure(text=text, text_color="orange")
+        else:
+            # Восстанавливаем статус "Готово"
+            self.status_label.configure(text="Готово", text_color="gray")
+    
     def start_updates(self):
         """Запуск всех потоков обновления"""
         self.update_thread = threading.Thread(target=self.update_stats, daemon=True)
