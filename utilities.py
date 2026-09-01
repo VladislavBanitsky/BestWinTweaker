@@ -22,6 +22,19 @@ def blur_window(window):
         hWnd = windll.user32.FindWindowW(None, window.title())
         GlobalBlur(hWnd, Acrylic=True)
 
+# Функция для центрирования окон
+def center_window(window, width, height):
+    # Получаем размеры экрана
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+    
+    # Вычисляем координаты для центрирования окна
+    x = (screen_width // 2) - (width // 2)
+    y = (screen_height // 2) - (height // 2)
+    
+    # Устанавливаем положение окна
+    window.geometry(f'{width}x{height}+{x}+{y}')
+
 # Функция для проверки типа диска
 def get_disk_type(drive_letter='C:'):
     """Определение типа диска в Windows (работает в потоках)"""

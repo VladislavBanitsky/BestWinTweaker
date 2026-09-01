@@ -21,7 +21,7 @@ import patch_subprocess  # <-- ПЕРВЫМ ИМПОРТОМ
 # Импортируем GPUtil после патча
 import GPUtil
 
-from utilities import blur_window, no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, start_download, get_windows_version
+from utilities import blur_window, center_window, no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, start_download, get_windows_version
 from uwpremover import *
 from TweakerTools import TweakerTools
 from StartupManager import StartupManager
@@ -41,7 +41,7 @@ class BestWinTweaker:
         self.initial_data = initial_data or {}
         self.window = ctk.CTk()
         self.window.title("BestWinTweaker - Системный монитор и оптимизатор")
-        self.window.geometry("1400x750")
+        center_window(self.window, 1400, 850)
         self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
         
         blur_window(self.window)
