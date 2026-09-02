@@ -42,7 +42,7 @@ class BestWinTweaker:
         self.initial_data = initial_data or {}
         self.window = ctk.CTk()
         self.window.title("BestWinTweaker - Системный монитор и оптимизатор")
-        center_window(self.window, 1400, 850)
+        center_window(self.window, 1400, 690)
         self.window.iconbitmap(resource_path('./resources/images/BestWinTweaker.ico'))
         
         blur_window(self.window)
@@ -206,7 +206,7 @@ class BestWinTweaker:
 
         # Создание вкладок
         self.tabview = ctk.CTkTabview(self.main_container)
-        self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tabview.pack(fill="both", expand=True, padx=10, pady=0)
         
         # Нижняя панель
         self.create_footer()
@@ -440,7 +440,7 @@ class BestWinTweaker:
             text="Инструменты оптимизации системы",
             font=ctk.CTkFont(size=24, weight="bold")
         )
-        title_label.pack(pady=(0, 20))
+        title_label.pack(pady=(5, 20))
 
         # Фрейм для кнопок (сетка 4x3)
         buttons_grid = ctk.CTkFrame(buttons_container)
@@ -799,13 +799,13 @@ class BestWinTweaker:
         """Настройка вкладки О программе"""
         # Заголовок
         header_frame = ctk.CTkFrame(self.about_tab)
-        header_frame.pack(fill="x", padx=20, pady=(20, 10))
+        header_frame.pack(fill="both", expand=True, padx=20, pady=(20, 10))
         title_label = ctk.CTkLabel(
             header_frame,
             text="О программе",
             font=ctk.CTkFont(size=20, weight="bold")
         )
-        title_label.pack(side="top")
+        title_label.pack(side="top", pady=(5, 20))
 
         # Центральный фрейм для логотипа
         logo_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
@@ -1336,7 +1336,7 @@ class BestWinTweaker:
         threading.Thread(target=remove_thread, daemon=True).start()
 
     def create_header(self):
-        header = ctk.CTkFrame(self.main_container, height=60)
+        header = ctk.CTkFrame(self.main_container, height=40)
         header.pack(fill="x", padx=10, pady=(10, 5))
         header.pack_propagate(False)
 
@@ -1401,25 +1401,25 @@ class BestWinTweaker:
         cpu_frame.pack(fill="x", padx=10, pady=5)
 
         cpu_header = ctk.CTkFrame(cpu_frame, height=40)
-        cpu_header.pack(fill="x", padx=10, pady=(10, 5))
+        cpu_header.pack(fill="x", padx=10, pady=(10, 0))
         cpu_header.pack_propagate(False)
 
         ctk.CTkLabel(cpu_header, text=f"CPU - Центральный процессор",
-                     font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
 
         # Строка с названием CPU и кнопкой копирования
         cpu_name_frame = ctk.CTkFrame(cpu_frame, fg_color="transparent")
         cpu_name_frame.pack(anchor="w", padx=20, pady=(5, 0), fill="x")
         
         self.cpu_name = ctk.CTkLabel(cpu_name_frame, text=cpuinfo.get_cpu_info()['brand_raw'],
-                                     font=ctk.CTkFont(size=16, weight="bold"))
+                                     font=ctk.CTkFont(size=14, weight="bold"))
         self.cpu_name.pack(side="left")
         
         # Кнопка копирования для CPU
         copy_btn = self._create_copy_button(cpu_name_frame, cpuinfo.get_cpu_info()['brand_raw'])
         copy_btn.pack(side="left", padx=5)
 
-        self.cpu_progress = ctk.CTkProgressBar(cpu_frame, height=20)
+        self.cpu_progress = ctk.CTkProgressBar(cpu_frame, height=12)
         self.cpu_progress.pack(fill="x", pady=10, padx=20)
         self.cpu_progress.set(0)
 
@@ -1427,34 +1427,27 @@ class BestWinTweaker:
         info_frame.pack(fill="x", padx=20, pady=5)
 
         self.cpu_percent_label = ctk.CTkLabel(info_frame, text="Загрузка: 0%",
-                                              font=ctk.CTkFont(size=16))
+                                              font=ctk.CTkFont(size=14))
         self.cpu_percent_label.pack(side="left", padx=10)
 
         self.cpu_freq_label = ctk.CTkLabel(info_frame, text="Частота: 0 MHz",
-                                           font=ctk.CTkFont(size=16))
+                                           font=ctk.CTkFont(size=14))
         self.cpu_freq_label.pack(side="right", padx=10)
 
-        cores_frame = ctk.CTkFrame(cpu_frame)
-        cores_frame.pack(fill="x", padx=20, pady=5)
-
         cores_text = f"Ядер: {psutil.cpu_count()} логических, {psutil.cpu_count(logical=False)} физических"
-        self.cores_label = ctk.CTkLabel(cores_frame, text=cores_text, font=ctk.CTkFont(size=16))
-        self.cores_label.pack(side="left")
-        
-        # Кнопка копирования для информации о ядрах
-        copy_cores_btn = self._create_copy_button(cores_frame, cores_text)
-        copy_cores_btn.pack(side="left", padx=5)
+        self.cores_label = ctk.CTkLabel(info_frame, text=cores_text, font=ctk.CTkFont(size=14))
+        self.cores_label.pack()
 
     def create_ram_section(self, parent):
         ram_frame = ctk.CTkFrame(parent)
         ram_frame.pack(fill="x", padx=10, pady=5)
 
         ram_header = ctk.CTkFrame(ram_frame, height=40)
-        ram_header.pack(fill="x", padx=10, pady=(10, 5))
+        ram_header.pack(fill="x", padx=10, pady=(10, 0))
         ram_header.pack_propagate(False)
                 
         ctk.CTkLabel(ram_header, text=f"RAM - Оперативная память",
-                     font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
         
         # Строка с названием RAM и кнопкой копирования
         ram_name_frame = ctk.CTkFrame(ram_frame, fg_color="transparent")
@@ -1462,13 +1455,13 @@ class BestWinTweaker:
         
         ddr_type = get_ddr_type()
         self.ram_name = ctk.CTkLabel(ram_name_frame, text=ddr_type,
-                                     font=ctk.CTkFont(size=16, weight="bold"))
+                                     font=ctk.CTkFont(size=14, weight="bold"))
         self.ram_name.pack(side="left")
         
         copy_ram_btn = self._create_copy_button(ram_name_frame, ddr_type)
         copy_ram_btn.pack(side="left", padx=5)
         
-        self.ram_progress = ctk.CTkProgressBar(ram_frame, height=20)
+        self.ram_progress = ctk.CTkProgressBar(ram_frame, height=12)
         self.ram_progress.pack(fill="x", pady=10, padx=20)
         self.ram_progress.set(0)
 
@@ -1476,11 +1469,11 @@ class BestWinTweaker:
         info_frame.pack(fill="x", padx=20, pady=5)
 
         self.ram_percent_label = ctk.CTkLabel(info_frame, text="Использовано: 0%",
-                                              font=ctk.CTkFont(size=16))
+                                              font=ctk.CTkFont(size=14))
         self.ram_percent_label.pack(side="left", padx=10)
 
         self.ram_usage_label = ctk.CTkLabel(info_frame, text="Использовано: 0 GB / 0 GB",
-                                            font=ctk.CTkFont(size=16))
+                                            font=ctk.CTkFont(size=14))
         self.ram_usage_label.pack(side="right", padx=10)
     
     def create_board_section(self, parent):
@@ -1488,10 +1481,10 @@ class BestWinTweaker:
         board_frame.pack(fill="x", padx=10, pady=5)
 
         board_header = ctk.CTkFrame(board_frame, height=40)
-        board_header.pack(fill="x", padx=10, pady=(10, 5))
+        board_header.pack(fill="x", padx=10, pady=(10, 0))
         board_header.pack_propagate(False)
         ctk.CTkLabel(board_header, text=f"Материнская плата",
-                     font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
         
         # Строка с названием материнской платы и кнопкой копирования
         board_name_frame = ctk.CTkFrame(board_frame, fg_color="transparent")
@@ -1499,7 +1492,7 @@ class BestWinTweaker:
         
         board_model = get_board_model()
         self.board_label = ctk.CTkLabel(board_name_frame, text=board_model, 
-                                        font=ctk.CTkFont(size=16, weight="bold"))
+                                        font=ctk.CTkFont(size=14, weight="bold"))
         self.board_label.pack(side="left")
         
         copy_board_btn = self._create_copy_button(board_name_frame, board_model)
@@ -1511,11 +1504,11 @@ class BestWinTweaker:
         net_frame.pack(fill="x", padx=10, pady=5)
 
         net_header = ctk.CTkFrame(net_frame, height=40)
-        net_header.pack(fill="x", padx=10, pady=(10, 5))
+        net_header.pack(fill="x", padx=10, pady=(10, 0))
         net_header.pack_propagate(False)
 
-        ctk.CTkLabel(net_header, text="СЕТЬ",
-                     font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
+        ctk.CTkLabel(net_header, text="Сеть",
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
 
         # Строка с адаптером и кнопкой копирования
         net_adapter_frame = ctk.CTkFrame(net_frame, fg_color="transparent")
@@ -1524,7 +1517,7 @@ class BestWinTweaker:
         self.network_adapter_label = ctk.CTkLabel(
             net_adapter_frame, 
             text="Загрузка...", 
-            font=ctk.CTkFont(size=16, weight="bold"), 
+            font=ctk.CTkFont(size=14, weight="bold"), 
             justify="left"
         )
         self.network_adapter_label.pack(side="left")
@@ -1537,22 +1530,22 @@ class BestWinTweaker:
         info_frame.pack(fill="x", padx=20, pady=5)
 
         self.download_label = ctk.CTkLabel(info_frame, text="Загрузка: 0 MB/s",
-                                           font=ctk.CTkFont(size=16))
+                                           font=ctk.CTkFont(size=14))
         self.download_label.pack(side="left", pady=3)
 
         self.upload_label = ctk.CTkLabel(info_frame, text="Отдача: 0 MB/s",
-                                         font=ctk.CTkFont(size=16))
+                                         font=ctk.CTkFont(size=14))
         self.upload_label.pack(side="right", pady=3)
 
         traffic_frame = ctk.CTkFrame(net_frame)
         traffic_frame.pack(fill="x", padx=20, pady=5)
 
         self.total_download_label = ctk.CTkLabel(traffic_frame, text="Всего скачано: 0 GB",
-                                                 font=ctk.CTkFont(size=16))
+                                                 font=ctk.CTkFont(size=14))
         self.total_download_label.pack(side="left", pady=2)
 
         self.total_upload_label = ctk.CTkLabel(traffic_frame, text="Всего отправлено: 0 GB",
-                                               font=ctk.CTkFont(size=16))
+                                               font=ctk.CTkFont(size=14))
         self.total_upload_label.pack(side="right", pady=2)
 
         self.prev_net = psutil.net_io_counters()
@@ -1563,11 +1556,11 @@ class BestWinTweaker:
         disk_frame.pack(fill="x", padx=10, pady=5)
 
         disk_header = ctk.CTkFrame(disk_frame, height=40)
-        disk_header.pack(fill="x", padx=10, pady=(10, 5))
+        disk_header.pack(fill="x", padx=10, pady=(10, 0))
         disk_header.pack_propagate(False)
 
-        ctk.CTkLabel(disk_header, text="ДИСКИ",
-                     font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
+        ctk.CTkLabel(disk_header, text="Диски",
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
 
         self.disk_container = ctk.CTkFrame(disk_frame)
         self.disk_container.pack(fill="x", padx=20, pady=10)
@@ -1578,7 +1571,7 @@ class BestWinTweaker:
         self.disk_loading_label = ctk.CTkLabel(
             self.disk_container,
             text="Загрузка информации о дисках...",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(size=14),
             text_color="gray"
         )
         self.disk_loading_label.pack(pady=10)
@@ -1588,27 +1581,27 @@ class BestWinTweaker:
             gpu_frame.pack(fill="x", padx=10, pady=5)
 
             gpu_header = ctk.CTkFrame(gpu_frame, height=40)
-            gpu_header.pack(fill="x", padx=10, pady=(10, 5))
+            gpu_header.pack(fill="x", padx=10, pady=(10, 0))
             gpu_header.pack_propagate(False)
 
             ctk.CTkLabel(gpu_header, text="GPU - Видеокарта",
-                         font=ctk.CTkFont(size=16, weight="bold")).pack(side="left")
+                         font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
 
             self.gpu_container = ctk.CTkFrame(gpu_frame)
             self.gpu_container.pack(fill="x", padx=20, pady=10)
 
             self.gpu_label = ctk.CTkLabel(self.gpu_container, text="Поиск GPU...",
-                                          font=ctk.CTkFont(size=16))
+                                          font=ctk.CTkFont(size=14))
             self.gpu_label.pack(pady=10)
             self.gpu_widgets = {}
             self._gpu_copy_btns = {}  # Для хранения кнопок копирования GPU
 
     def create_footer(self):
-        footer = ctk.CTkFrame(self.main_container, height=40)
+        footer = ctk.CTkFrame(self.main_container, height=30)
         footer.pack(fill="x", padx=10, pady=(5, 10))
         footer.pack_propagate(False)
 
-        self.time_label = ctk.CTkLabel(footer, text="", font=ctk.CTkFont(size=16))
+        self.time_label = ctk.CTkLabel(footer, text="", font=ctk.CTkFont(size=14))
         self.time_label.pack(side="right", padx=20)
 
         # Статус операций
@@ -1746,7 +1739,7 @@ class BestWinTweaker:
                     name_label = ctk.CTkLabel(
                         disk_name_frame, 
                         text=disk_name,
-                        font=ctk.CTkFont(size=16, weight="bold")
+                        font=ctk.CTkFont(size=14, weight="bold")
                     )
                     name_label.pack(side="left")
                     
@@ -1757,13 +1750,13 @@ class BestWinTweaker:
                     )
                     copy_type_btn.pack(side="left", padx=2)
 
-                    progress = ctk.CTkProgressBar(disk_frame, height=20)
+                    progress = ctk.CTkProgressBar(disk_frame, height=12)
                     progress.pack(fill="x", padx=5, pady=2)
 
                     info_label = ctk.CTkLabel(
                         disk_frame, 
                         text="",
-                        font=ctk.CTkFont(size=16)
+                        font=ctk.CTkFont(size=14)
                     )
                     info_label.pack(anchor="w", padx=5, pady=(0, 2))
 
@@ -1930,7 +1923,7 @@ class BestWinTweaker:
                 self.gpu_label = ctk.CTkLabel(
                     self.gpu_container, 
                     text="GPU не обнаружен",
-                    font=ctk.CTkFont(size=16)
+                    font=ctk.CTkFont(size=14)
                 )
                 self.gpu_label.pack(pady=10)
                 return
@@ -1989,14 +1982,14 @@ class BestWinTweaker:
                     name_label = ctk.CTkLabel(
                         gpu_name_frame, 
                         text=gpu_name,
-                        font=ctk.CTkFont(size=16, weight="bold")
+                        font=ctk.CTkFont(size=14, weight="bold")
                     )
                     name_label.pack(side="left")
                     
                     copy_gpu_btn = self._create_copy_button(gpu_name_frame, gpu_name)
                     copy_gpu_btn.pack(side="left", padx=5)
                     
-                    load_progress = ctk.CTkProgressBar(gpu_card_frame, height=20)
+                    load_progress = ctk.CTkProgressBar(gpu_card_frame, height=12)
                     load_progress.pack(fill="x", padx=10, pady=5)
                     
                     info_label = ctk.CTkLabel(
