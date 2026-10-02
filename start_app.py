@@ -66,6 +66,8 @@ class AppLauncher:
             
         except Exception as e:
             print(f"Ошибка запуска: {e}")
+            
+
 
 def main():
     """Главная функция"""

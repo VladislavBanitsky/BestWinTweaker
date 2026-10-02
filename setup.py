@@ -1,3 +1,4 @@
+# setup.py
 import PyInstaller.__main__
 import os
 
@@ -10,34 +11,26 @@ APP_NAME = "BestWinTweaker"
 SCRIPT_PATH = "start_app.py"
 ICON_PATH = "./resources/images/BestWinTweaker.ico"
 
-# Разбиваем версию на компоненты
+# Разбираем версию
 version_parts = VERSION.split('.')
-major, minor, patch = version_parts[0], version_parts[1], version_parts[2]
-# Если есть четвертая часть (build), добавляем, иначе 0
+major = version_parts[0] if len(version_parts) > 0 else "0"
+minor = version_parts[1] if len(version_parts) > 1 else "0"
+patch = version_parts[2] if len(version_parts) > 2 else "0"
 build = version_parts[3] if len(version_parts) > 3 else "0"
 
-# Создаем файл версии
+
 def create_version_file():
+    """Создаёт файл версии для PyInstaller"""
     version_content = f'''# UTF-8
-#
-# For more details about fixed file info 'ffi' see:
-# http://msdn.microsoft.com/en-us/library/ms646997.aspx
 VSVersionInfo(
   ffi=FixedFileInfo(
-    # filevers and prodvers should be a tuple of integers (major, minor, build, private)
     filevers=({major}, {minor}, {patch}, {build}),
     prodvers=({major}, {minor}, {patch}, {build}),
-    # Contains a bitmask that specifies the valid bits 'flags'
     mask=0x3f,
-    # Contains a bitmask that specifies the Boolean attributes of the file.
     flags=0x0,
-    # The operating system for which this file was designed.
     OS=0x40004,
-    # The general type of file.
     fileType=0x1,
-    # The function of the file.
     subtype=0x0,
-    # The date and time stamp of the file.
     date=(0, 0)
     ),
   kids=[
@@ -47,12 +40,12 @@ VSVersionInfo(
         u'040904B0',
         [StringStruct(u'CompanyName', u'BestWinTweaker'),
         StringStruct(u'FileDescription', u'BestWinTweaker - Системный монитор и оптимизатор'),
-        StringStruct(u'FileVersion', u'{VERSION}.{build}'),
+        StringStruct(u'FileVersion', u'{VERSION}'),
         StringStruct(u'InternalName', u'BestWinTweaker'),
         StringStruct(u'LegalCopyright', u'Copyright © 2026'),
         StringStruct(u'OriginalFilename', u'BestWinTweaker.exe'),
         StringStruct(u'ProductName', u'BestWinTweaker'),
-        StringStruct(u'ProductVersion', u'{VERSION}.{build}')])
+        StringStruct(u'ProductVersion', u'{VERSION}')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]
@@ -62,28 +55,49 @@ VSVersionInfo(
         f.write(version_content)
     return 'version.txt'
 
-# Создаем файл версии
+
 version_file = create_version_file()
 
 # Аргументы для PyInstaller
 args = [
     SCRIPT_PATH,
     f"--name={APP_NAME}",
-    "--onefile",                    # Один exe файл
-    "--windowed",                   # Без консольного окна
-    "--noconsole",                  # Без консоли (дубль)
+    "--onefile",
+    "--windowed",
+    "--noconsole",
     f"--icon={ICON_PATH}",
-    f"--version-file={version_file}",  # Файл с версией
-    "--add-data=./resources;./resources",  # Добавляем папку с ресурсами
+    f"--version-file={version_file}",
+    "--add-data=./resources;./resources",
+
+    # --- Скрытые импорты проекта ---
+    "--hidden-import=start_app",
+    "--hidden-import=splash_screen",
+    "--hidden-import=data_loader",
+    "--hidden-import=ConfigManager",
+    "--hidden-import=StatusManager",
+    "--hidden-import=TweakerTools",
+    "--hidden-import=StartupManager",
+    "--hidden-import=ProcessesManager",
+    "--hidden-import=proc_colors",
+    "--hidden-import=utilities",
+    "--hidden-import=uwpremover",
+    "--hidden-import=bing_wallpaper",
+    "--hidden-import=BestWinTweaker",
+    "--hidden-import=version",
+    "--hidden-import=patch_subprocess",
+
+    # --- Внешние зависимости ---
     "--hidden-import=GPUtil",
     "--hidden-import=cpuinfo",
     "--hidden-import=customtkinter",
     "--hidden-import=PIL",
+    "--hidden-import=PIL.Image",
+    "--hidden-import=PIL.ImageTk",
     "--hidden-import=winreg",
     "--hidden-import=psutil",
     "--hidden-import=platform",
     "--hidden-import=datetime",
-    "--hidden-import=requests",      # Добавлено для Fido
+    "--hidden-import=requests",
     "--hidden-import=wmi",
     "--hidden-import=pythoncom",
     "--hidden-import=pywin32",
@@ -93,21 +107,34 @@ args = [
     "--hidden-import=shutil",
     "--hidden-import=tempfile",
     "--hidden-import=webbrowser",
-    "--hidden-import=patch_subprocess",  # патч для скрытого опроса видеокарты
-    "--collect-data=customtkinter",  # Собираем темы customtkinter
-    "--collect-all=tkinter",
+    "--hidden-import=threading",
+    "--hidden-import=multiprocessing",
+    "--hidden-import=ctypes",
+    "--hidden-import=subprocess",
+    "--hidden-import=concurrent.futures",
+    "--hidden-import=BlurWindow",
+    "--hidden-import=BlurWindow.blurWindow",
+
+    # --- Сбор данных ---
+    "--collect-data=customtkinter",
     "--collect-all=customtkinter",
-    "--uac-admin",                   # Запуск от администратора
-    "--clean",                       # Очистка временных файлов
-    "--noconfirm",                   # Не спрашивать подтверждение
+    "--collect-all=tkinter",
+    "--collect-all=PIL",
+    "--collect-all=psutil",
+    "--collect-all=wmi",
+    "--collect-all=pywin32",
+    "--collect-all=BlurWindow",
+
+    "--uac-admin",
+    "--clean",
+    "--noconfirm",
 ]
 
-# Запускаем PyInstaller
-PyInstaller.__main__.run(args)
+try:
+    PyInstaller.__main__.run(args)
+    print("Сборка завершена!")
+finally:
+    if os.path.exists(version_file):
+        os.remove(version_file)
 
-print("Сборка завершена!")
 input("Нажмите Enter, чтобы выйти...")
-
-# Удаляем временный файл версии
-if os.path.exists(version_file):
-    os.remove(version_file)

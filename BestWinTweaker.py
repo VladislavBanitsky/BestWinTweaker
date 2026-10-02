@@ -27,6 +27,8 @@ from TweakerTools import TweakerTools
 from StartupManager import StartupManager
 from ConfigManager import ConfigManager
 from StatusManager import StatusManager
+from ProcessesManager import ProcessesManager
+from proc_colors import PROC_COLORS
 
 # Настройка внешнего вида customtkinter
 ctk.set_appearance_mode("light")
@@ -195,6 +197,11 @@ class BestWinTweaker:
         if self.preloaded_uwp:
             self.uwp_apps = self.preloaded_uwp
             self.display_uwp_apps_fixed()
+        
+        # Применяем данные процессов
+        if self.initial_data.get('Процессы'):
+            self.processes_data = self.initial_data['Процессы']
+            self._update_processes_ui(self.processes_data)
     
     def setup_ui(self):
         # Главный контейнер
@@ -205,7 +212,7 @@ class BestWinTweaker:
         self.create_header()
 
         # Создание вкладок
-        self.tabview = ctk.CTkTabview(self.main_container)
+        self.tabview = ctk.CTkTabview(self.main_container, command=self._on_tab_changed)
         self.tabview.pack(fill="both", expand=True, padx=10, pady=0)
         
         # Нижняя панель
@@ -214,6 +221,10 @@ class BestWinTweaker:
         # Вкладка мониторинга
         self.monitor_tab = self.tabview.add("Мониторинг")
         self.setup_monitor_tab()
+        
+        # Вкладка процессов
+        self.processes_tab = self.tabview.add("Процессы")
+        self.setup_processes_tab()
 
         # Вкладка оптимизации
         self.optimize_tab = self.tabview.add("Оптимизация")
@@ -233,7 +244,25 @@ class BestWinTweaker:
 
         self.load_autostart_programs()
         self.load_uwp_apps()
-        
+    
+    def _on_tab_changed(self):
+        """При входе на вкладку 'Процессы' — делаем полное обновление,
+        если данных ещё нет или они устарели (старше 30 сек)."""
+        try:
+            if self.tabview.get() != "Процессы":
+                return
+        except Exception:
+            return
+
+        if not self._initial_load_done or self._processes_data_stale():
+            self.load_processes_full()
+
+
+    def _processes_data_stale(self, max_age=30):
+        """Проверяет, устарел ли список процессов."""
+        ts = getattr(self, '_processes_last_full_ts', 0)
+        return (time.time() - ts) > max_age
+    
     def setup_uwp_tab(self):
         """Настройка вкладки управления UWP-приложениями"""
         # Создаем экземпляр класса удаления
@@ -1395,6 +1424,10 @@ class BestWinTweaker:
         # Очищаем кеш иконок для перезагрузки
         self._copy_icon_cache = None
         self._gpu_copy_btns.clear()
+        
+        # Перерисовываем таблицу процессов с новыми цветами
+        if hasattr(self, "processes_data") and self.processes_data:
+            self.filter_processes()
     
     def create_cpu_section(self, parent):
         cpu_frame = ctk.CTkFrame(parent)
@@ -2028,7 +2061,866 @@ class BestWinTweaker:
             print(f"GPU UI update error: {e}")
             import traceback
             traceback.print_exc()
+    
+    def setup_processes_tab(self):
+        self.processes_manager = ProcessesManager()
+        self.processes_data = []
+        self.process_widgets = {}          # pid -> {'row':..., 'labels':..., 'data':...}
+        self.process_sort_column = 'cpu_percent'
+        self.process_sort_reverse = True
+        self._processes_updating = False       # полное обновление
+        self._processes_fast_updating = False  # быстрое обновление
+        self._selected_process_pid = None
+        self._search_after_id = None
+        self._processes_refresh_job = None
+        self._initial_load_done = False
+        self._processes_last_full_ts = 0  # 0 → сразу «устарело»
+        
+        main_frame = ctk.CTkFrame(self.processes_tab)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
+        # ---------- Верхняя панель ----------
+        top_frame = ctk.CTkFrame(main_frame)
+        top_frame.pack(fill="x", padx=5, pady=(0, 5))
+
+        ctk.CTkLabel(
+            top_frame,
+            text="Системные процессы",
+            font=ctk.CTkFont(size=18, weight="bold")
+        ).pack(side="left", padx=10)
+        
+        self.process_beta_label = ctk.CTkLabel(
+            top_frame,
+            text="[beta]",
+            font=ctk.CTkFont(size=20),
+            text_color="red"
+        )
+        self.process_beta_label.pack(side="left")
+
+        btn_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
+        btn_frame.pack(side="right")
+
+        # «Обновить» — ПОЛНОЕ обновление (пересобрать список процессов)
+        self.refresh_processes_btn = ctk.CTkButton(
+            btn_frame,
+            text="Обновить список",
+            command=self.load_processes_full,
+            width=140,
+            height=30,
+        )
+        self.refresh_processes_btn.pack(side="left", padx=5)
+
+        # Чекбокс автообновления (только быстрые метрики)
+        self.auto_refresh_var = tk.BooleanVar(value=True)
+        self.auto_refresh_check = ctk.CTkCheckBox(
+            btn_frame,
+            text="Автообновление",
+            variable=self.auto_refresh_var,
+            command=self.toggle_auto_refresh
+        )
+        self.auto_refresh_check.pack(side="left", padx=5)
+
+        # ---------- Поиск ----------
+        search_frame = ctk.CTkFrame(main_frame)
+        search_frame.pack(fill="x", padx=5, pady=(0, 5))
+
+        ctk.CTkLabel(search_frame, text="Поиск:", font=ctk.CTkFont(size=13)) \
+            .pack(side="left", padx=(10, 5))
+
+        self.process_search_var = tk.StringVar()
+        self.process_search_var.trace_add('write', self._on_process_search_changed)
+
+        self.process_search_entry = ctk.CTkEntry(
+            search_frame,
+            textvariable=self.process_search_var,
+            placeholder_text="Введите имя процесса или PID...",
+            width=300,
+            height=30
+        )
+        self.process_search_entry.pack(side="left", padx=5, pady=5)
+
+        ctk.CTkButton(
+            search_frame,
+            text="✕",
+            command=lambda: self.process_search_var.set(""),
+            width=30,
+            height=30,
+            fg_color="transparent",
+            hover_color="#3a3a5a"
+        ).pack(side="left", padx=2)
+
+        # ---------- Заголовки + список + панель действий ----------
+        self.create_processes_header(main_frame)
+
+        self.processes_container = ctk.CTkScrollableFrame(main_frame, height=400)
+        self.processes_container.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self.create_process_actions(main_frame)
+
+        # ---------- Первичная загрузка + автообновление ----------
+        self.load_processes_full()
+        self.start_processes_auto_refresh()
+    
+    def load_processes_full(self):
+        """Полное обновление списка процессов: добавляет/удаляет строки,
+        читает exe, username, cmdline и т.п.
+        Вызывается ТОЛЬКО по кнопке или при первом входе.
+        """
+        if self._processes_updating:
+            return
+
+        self._processes_updating = True
+        self.refresh_processes_btn.configure(state="disabled", text="Обновление...")
+
+        def worker():
+            try:
+                processes = self.processes_manager.get_processes()
+                self.window.after(0, lambda: self._apply_full_processes(processes))
+            except Exception as e:
+                print(f"Full load error: {e}")
+                self.window.after(0, lambda e=e: self._processes_load_error(str(e)))
+
+        threading.Thread(target=worker, daemon=True).start()
+    
+    def _apply_full_processes(self, processes):
+        """Пересобирает данные и синхронизирует UI: создаёт/удаляет строки."""
+        try:
+            self.processes_data = processes
+            self._initial_load_done = True
+
+            filtered = self.get_filtered_processes()
+            sorted_processes = self.sort_processes_list(filtered)
+            visible = sorted_processes[:200]
+            visible_pids = {p['pid'] for p in visible}
+
+            # Удаляем исчезнувшие
+            for pid in list(self.process_widgets.keys()):
+                if pid not in visible_pids:
+                    self._destroy_process_row(pid)
+
+            # Создаём/обновляем
+            for process in visible:
+                pid = process['pid']
+                if pid in self.process_widgets:
+                    self._update_process_row(process)
+                else:
+                    self._create_process_row(process)
+
+            self._reorder_process_rows(visible)
+            self._processes_last_full_ts = time.time()
+
+        except Exception as e:
+            print(f"Error applying full processes: {e}")
+        finally:
+            self.refresh_processes_btn.configure(state="normal", text="Обновить список")
+            self._processes_updating = False
+    
+    def load_processes_fast(self):
+        """Быстрое обновление ТОЛЬКО метрик (cpu, ram, disk, status).
+        Ничего не создаёт и не удаляет — только configure() у существующих меток.
+        """
+        if self._processes_fast_updating or self._processes_updating:
+            return
+        if not self._initial_load_done or not self.process_widgets:
+            return
+
+        self._processes_fast_updating = True
+
+        def worker():
+            try:
+                metrics = self.processes_manager.get_processes_fast()
+                self.window.after(0, lambda: self._apply_fast_processes(metrics))
+            except Exception as e:
+                print(f"Fast load error: {e}")
+                self.window.after(0, self._fast_update_done)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+
+    def _apply_fast_processes(self, metrics):
+        """Применяет быстрые метрики к существующим строкам."""
+        try:
+            # Обновляем self.processes_data — чтобы детали/сортировка были актуальны
+            for proc in self.processes_data:
+                pid = proc['pid']
+                m = metrics.get(pid)
+                if m:
+                    proc.update(m)
+
+            # Обновляем только те строки, что есть в UI
+            for pid, entry in self.process_widgets.items():
+                proc = entry['data']
+                m = metrics.get(pid)
+                if m:
+                    proc.update(m)
+                    self._update_process_row(proc)
+
+        except Exception as e:
+            print(f"Error applying fast processes: {e}")
+        finally:
+            self._fast_update_done()
+
+
+    def _fast_update_done(self):
+        self._processes_fast_updating = False
+    
+    def create_processes_header(self, parent):
+        """Создание заголовков таблицы процессов"""
+        header_frame = ctk.CTkFrame(parent, height=35)
+        header_frame.pack(fill="x", padx=5, pady=(0, 2))
+        header_frame.pack_propagate(False)
+        
+        # Настраиваем колонки
+        columns = [
+            ("PID", 60, 'pid'),
+            ("Имя процесса", 200, 'name'),
+            ("CPU %", 80, 'cpu_percent'),
+            ("Память %", 80, 'memory_percent'),
+            ("Память МБ", 90, 'memory_mb'),
+            ("Диск чтение", 100, 'disk_read'),
+            ("Диск запись", 100, 'disk_write'),
+            ("Сеть", 70, 'net_connections'),
+            ("GPU %", 70, 'gpu_usage'),
+            ("Статус", 80, 'status'),
+        ]
+        
+        self.process_columns = columns
+        
+        for col_name, width, sort_key in columns:
+            # Создаем кнопку для сортировки
+            btn = ctk.CTkButton(
+                header_frame,
+                text=col_name,
+                width=width,
+                height=30,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                fg_color="transparent",
+                hover_color="#3a3a5a",
+                anchor="w",
+                command=lambda k=sort_key: self.sort_processes(k)
+            )
+            btn.pack(side="left", padx=1)
+    
+    def create_process_actions(self, parent):
+        """Создание панели действий с процессом"""
+        actions_frame = ctk.CTkFrame(parent)
+        actions_frame.pack(fill="x", padx=5, pady=(5, 0))
+        
+        # Информация о выбранном процессе
+        self.selected_process_label = ctk.CTkLabel(
+            actions_frame,
+            text="Процесс не выбран",
+            font=ctk.CTkFont(size=13),
+            text_color="gray"
+        )
+        self.selected_process_label.pack(side="left", padx=10)
+        
+        # Кнопки действий
+        btn_frame = ctk.CTkFrame(actions_frame, fg_color="transparent")
+        btn_frame.pack(side="right", padx=5)
+        
+        # Кнопка "Детали"
+        self.details_btn = ctk.CTkButton(
+            btn_frame,
+            text="Детали",
+            command=self.show_process_details,
+            width=80,
+            height=30,
+            state="disabled"
+        )
+        self.details_btn.pack(side="left", padx=3)
+        
+        # Кнопка "Приостановить"
+        self.suspend_btn = ctk.CTkButton(
+            btn_frame,
+            text="Пауза",
+            command=self.suspend_selected_process,
+            width=80,
+            height=30,
+            state="disabled",
+            fg_color="orange",
+            hover_color="darkorange"
+        )
+        self.suspend_btn.pack(side="left", padx=3)
+        
+        # Кнопка "Завершить"
+        self.kill_btn = ctk.CTkButton(
+            btn_frame,
+            text="Завершить",
+            command=self.kill_selected_process,
+            width=90,
+            height=30,
+            state="disabled",
+            fg_color="red",
+            hover_color="darkred"
+        )
+        self.kill_btn.pack(side="left", padx=3)
+    
+    def load_processes(self):
+        """Асинхронная загрузка списка процессов"""
+        if self._processes_updating:
+            return
+
+        self._processes_updating = True
+        self.refresh_processes_btn.configure(state="disabled")
+
+        def load_in_thread():
+            try:
+                processes = self.processes_manager.get_processes()
+                self.window.after(0, lambda: self._update_processes_ui(processes))
+            except Exception as e:
+                print(f"Error loading processes: {e}")
+                self.window.after(0, lambda e=e: self._processes_load_error(str(e)))
+
+        threading.Thread(target=load_in_thread, daemon=True).start()
+    
+    def _update_processes_ui(self, processes):
+        """Обновление UI: обновляем существующие строки вместо пересоздания."""
+        try:
+            self.processes_data = processes
+
+            # --- Фильтр + сортировка ---
+            filtered = self.get_filtered_processes()
+            sorted_processes = self.sort_processes_list(filtered)
+            visible = sorted_processes[:200]
+            visible_pids = {p['pid'] for p in visible}
+
+            # --- Удаляем исчезнувшие строки ---
+            for pid in list(self.process_widgets.keys()):
+                if pid not in visible_pids:
+                    self._destroy_process_row(pid)
+
+            # --- Обновляем существующие / создаём новые ---
+            for process in visible:
+                pid = process['pid']
+                if pid in self.process_widgets:
+                    self._update_process_row(process)
+                else:
+                    self._create_process_row(process)
+
+            # --- Порядок строк в контейнере (переупаковка) ---
+            # pack() сам переупорядочит, если мы вызываем pack_forget + pack заново,
+            # но это дорого. Проще: если сортировка изменилась — оставляем как есть.
+            # Для корректного порядка при изменении сортировки — перепакуем.
+            self._reorder_process_rows(visible)
+
+            self.refresh_processes_btn.configure(state="normal")
+        except Exception as e:
+            print(f"Error updating processes UI: {e}")
+        finally:
+            self._processes_updating = False
+    
+    def _create_process_row(self, process):
+        """Создаёт строку процесса и сохраняет ссылки на все её метки."""
+        pid = process['pid']
+
+        row_frame = ctk.CTkFrame(
+            self.processes_container,
+            height=32,
+            fg_color=PROC_COLORS["row_bg"],
+            corner_radius=4,
+        )
+        row_frame.pack(fill="x", padx=2, pady=1)
+        row_frame.pack_propagate(False)
+
+        row_frame.bind("<Button-1>", lambda e, p=pid: self.select_process(p))
+        row_frame.bind("<Enter>", lambda e, w=row_frame, p=pid: self._on_row_hover(w, p, True))
+        row_frame.bind("<Leave>", lambda e, w=row_frame, p=pid: self._on_row_hover(w, p, False))
+
+        # Колонки: (ширина, ключ для обновления)
+        columns = [
+            ("pid",             60),
+            ("name",            200),
+            ("cpu_percent",     80),
+            ("memory_percent",  80),
+            ("memory_mb",       90),
+            ("disk_read",       100),
+            ("disk_write",      100),
+            ("net_connections", 70),
+            ("gpu_usage",       70),
+            ("status",          80),
+        ]
+
+        labels = {}
+        for key, width in columns:
+            lbl = ctk.CTkLabel(
+                row_frame,
+                text="",
+                width=width,
+                anchor="w",
+                font=ctk.CTkFont(size=11),
+            )
+            lbl.pack(side="left", padx=1)
+            lbl.bind("<Button-1>", lambda e, p=pid: self.select_process(p))
+            labels[key] = lbl
+
+        self.process_widgets[pid] = {
+            'row': row_frame,
+            'labels': labels,
+            'data': process,
+        }
+        self._update_process_row(process)
+        return self.process_widgets[pid]
+    
+    def _destroy_process_row(self, pid):
+        """Удаляет строку процесса из UI."""
+        entry = self.process_widgets.pop(pid, None)
+        if entry:
+            entry['row'].destroy()
+
+
+    def _reorder_process_rows(self, visible):
+        """Переставляет строки в контейнере в порядке visible.
+
+        Вызывается только если порядок действительно изменился.
+        """
+        if not visible:
+            return
+
+        # Запоминаем текущий порядок
+        current_pids = [p['pid'] for p in visible if p['pid'] in self.process_widgets]
+        existing_order = []
+        for child in self.processes_container.winfo_children():
+            for pid, entry in self.process_widgets.items():
+                if entry['row'] is child:
+                    existing_order.append(pid)
+                    break
+
+        if existing_order == current_pids:
+            return  # порядок не изменился — ничего не делаем
+
+        # Иначе — перепаковываем
+        for pid in current_pids:
+            entry = self.process_widgets.get(pid)
+            if entry:
+                entry['row'].pack_forget()
+        for pid in current_pids:
+            entry = self.process_widgets.get(pid)
+            if entry:
+                entry['row'].pack(fill="x", padx=2, pady=1)
+    
+    def _update_process_row(self, process):
+        """Обновляет существующую строку процесса — БЕЗ пересоздания виджетов."""
+        pid = process['pid']
+        entry = self.process_widgets.get(pid)
+        if not entry:
+            return
+
+        entry['data'] = process
+        labels = entry['labels']
+
+        # --- Статус ---
+        status_map = {
+            'running':  (PROC_COLORS["status_running"],  "Работает"),
+            'sleeping': (PROC_COLORS["status_sleep"],    "Спит"),
+            'stopped':  (PROC_COLORS["status_stopped"],  "Остановлен"),
+            'zombie':   (PROC_COLORS["status_zombie"],   "Зомби"),
+        }
+        status_color, status_text = status_map.get(
+            process.get('status', 'unknown'),
+            (PROC_COLORS["status_sleep"], str(process.get('status', ''))[:10])
+        )
+
+        # --- Значения ---
+        cpu = process.get('cpu_percent', 0.0)
+        mem_pct = process.get('memory_percent', 0.0)
+        mem_mb = process.get('memory_mb', 0.0)
+
+        disk_read = process.get('disk_read', 0) / (1024 * 1024)
+        disk_write = process.get('disk_write', 0) / (1024 * 1024)
+
+        gpu = process.get('gpu_usage', 0.0)
+        net = process.get('net_connections', 0)
+
+        # --- Обновляем текст и цвет ---
+        labels['pid'].configure(text=str(pid), text_color=PROC_COLORS["text_pid"])
+        labels['name'].configure(
+            text=(process.get('name', '') or '')[:25],
+            text_color=PROC_COLORS["text_default"]
+        )
+        labels['cpu_percent'].configure(
+            text=f"{cpu:.1f}",
+            text_color=self._get_load_color(cpu)
+        )
+        labels['memory_percent'].configure(
+            text=f"{mem_pct:.1f}",
+            text_color=self._get_load_color(mem_pct)
+        )
+        labels['memory_mb'].configure(
+            text=f"{mem_mb:.0f}",
+            text_color=PROC_COLORS["text_mem"]
+        )
+        labels['disk_read'].configure(
+            text=f"{disk_read:.1f} МБ" if disk_read > 0 else "0",
+            text_color=PROC_COLORS["text_disk_read"]
+        )
+        labels['disk_write'].configure(
+            text=f"{disk_write:.1f} МБ" if disk_write > 0 else "0",
+            text_color=PROC_COLORS["text_disk_write"]
+        )
+        labels['net_connections'].configure(
+            text=str(net),
+            text_color=PROC_COLORS["text_net"]
+        )
+        labels['gpu_usage'].configure(
+            text=f"{gpu:.1f}" if gpu > 0 else "0",
+            text_color=PROC_COLORS["text_gpu"]
+        )
+        labels['status'].configure(
+            text=status_text,
+            text_color=status_color
+        )
+    
+    def _on_row_hover(self, widget, pid, entering):
+        if pid == self._selected_process_pid:
+            return
+        widget.configure(
+            fg_color=PROC_COLORS["row_hover"] if entering else PROC_COLORS["row_bg"]
+        )
+    
+    def _get_load_color(self, percent):
+        if percent >= 80:
+            return PROC_COLORS["load_crit"]
+        elif percent >= 50:
+            return PROC_COLORS["load_high"]
+        elif percent >= 20:
+            return PROC_COLORS["load_mid"]
+        else:
+            return PROC_COLORS["load_low"]
+    
+    def _processes_load_error(self, error):
+        """Обработка ошибки загрузки процессов"""
+        self.status_manager.set_status(f"Ошибка: {error}", "red", priority=2, timeout=5000)
+        self.refresh_processes_btn.configure(state="normal")
+        self._processes_updating = False
+    
+    def get_filtered_processes(self):
+        search_text = self.process_search_var.get().lower().strip()
+        show_system_var = getattr(self, 'show_system_var', None)
+        show_system = show_system_var.get() if show_system_var else False
+
+        filtered = []
+        for p in self.processes_data:
+            name = p.get('name', '')
+
+            # is_always_hidden больше не нужен — их уже нет в processes_data
+            if not show_system and ProcessesManager.is_system(name):
+                continue
+
+            if not search_text:
+                filtered.append(p)
+                continue
+
+            if (search_text in name.lower()
+                    or search_text in str(p['pid'])
+                    or search_text in p.get('exe', '').lower()):
+                filtered.append(p)
+
+        return filtered
+    
+    def sort_processes(self, column):
+        """Сортировка процессов по колонке"""
+        if self.process_sort_column == column:
+            self.process_sort_reverse = not self.process_sort_reverse
+        else:
+            self.process_sort_column = column
+            self.process_sort_reverse = True
+        
+        self.filter_processes()
+    
+    def sort_processes_list(self, processes):
+        """Сортировка списка процессов"""
+        try:
+            return sorted(
+                processes,
+                key=lambda x: x.get(self.process_sort_column, 0),
+                reverse=self.process_sort_reverse
+            )
+        except Exception:
+            return processes
+    
+    def _on_process_search_changed(self, *args):
+        """Дебаунс поиска: не фильтруем на каждый ввод символа."""
+        if self._search_after_id is not None:
+            try:
+                self.window.after_cancel(self._search_after_id)
+            except Exception:
+                pass
+        self._search_after_id = self.window.after(300, self.filter_processes)
+
+
+    def filter_processes(self):
+        """Поиск — перерисовка из уже имеющихся данных (без сети и без psutil).
+        Список процессов берём из self.processes_data — он актуален.
+        """
+        self._search_after_id = None
+        if not self.processes_data:
+            return
+
+        filtered = self.get_filtered_processes()
+        sorted_processes = self.sort_processes_list(filtered)
+        visible = sorted_processes[:200]
+        visible_pids = {p['pid'] for p in visible}
+
+        for pid in list(self.process_widgets.keys()):
+            if pid not in visible_pids:
+                self._destroy_process_row(pid)
+
+        for process in visible:
+            pid = process['pid']
+            if pid in self.process_widgets:
+                self._update_process_row(process)
+            else:
+                self._create_process_row(process)
+
+        self._reorder_process_rows(visible)
+    
+    def select_process(self, pid):
+        """Выбор процесса в таблице."""
+        self._selected_process_pid = pid
+
+        for p, entry in self.process_widgets.items():
+            row = entry['row']
+            if p == pid:
+                row.configure(fg_color=PROC_COLORS["row_selected"])
+            else:
+                row.configure(fg_color=PROC_COLORS["row_bg"])
+
+        process = next((p for p in self.processes_data if p['pid'] == pid), None)
+        if process:
+            self.selected_process_label.configure(
+                text=f"Выбран: {process['name']} (PID: {pid})",
+                text_color=("black", "white"),
+            )
+            self.details_btn.configure(state="normal")
+            self.kill_btn.configure(state="normal")
+            self.suspend_btn.configure(
+                text="Продолжить" if process.get('status') == 'stopped' else "Пауза",
+                state="normal"
+            )
+    
+    def show_process_details(self):
+        """Показать детали выбранного процесса"""
+        if not self._selected_process_pid:
+            return
+        
+        pid = self._selected_process_pid
+        details = self.processes_manager.get_process_details(pid)
+        
+        if not details:
+            messagebox.showerror("Ошибка", "Не удалось получить информацию о процессе")
+            return
+        
+        # Создаем окно с деталями
+        details_window = ctk.CTkToplevel(self.window)
+        details_window.title(f"Детали процесса: {details['name']}")
+        details_window.geometry("700x600")
+        details_window.transient(self.window)
+        details_window.grab_set()
+        
+        # Основной контейнер
+        main_frame = ctk.CTkFrame(details_window)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Заголовок
+        ctk.CTkLabel(
+            main_frame,
+            text=f"📋 {details['name']}",
+            font=ctk.CTkFont(size=20, weight="bold")
+        ).pack(anchor="w", pady=(0, 15))
+        
+        # Информация в виде сетки
+        info_frame = ctk.CTkFrame(main_frame)
+        info_frame.pack(fill="x", pady=10)
+        
+        info_items = [
+            ("PID", str(details['pid'])),
+            ("Имя", details['name']),
+            ("Путь", details['exe'] or "Недоступно"),
+            ("Пользователь", details['username'] or "Недоступно"),
+            ("Статус", details['status']),
+            ("CPU", f"{details['cpu_percent']:.1f}%"),
+            ("Память", f"{details['memory_mb']:.1f} MB ({details['memory_percent']:.1f}%)"),
+            ("Потоков", str(details['num_threads'])),
+        ]
+        
+        for i, (label, value) in enumerate(info_items):
+            row = i // 2
+            col = i % 2
+            
+            item_frame = ctk.CTkFrame(info_frame, fg_color="transparent")
+            item_frame.grid(row=row, column=col, sticky="w", padx=10, pady=5)
+            
+            ctk.CTkLabel(
+                item_frame,
+                text=f"{label}:",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                width=100,
+                anchor="w"
+            ).pack(side="left")
+            
+            ctk.CTkLabel(
+                item_frame,
+                text=value,
+                font=ctk.CTkFont(size=12),
+                anchor="w"
+            ).pack(side="left", padx=5)
+        
+        # Командная строка
+        cmd_frame = ctk.CTkFrame(main_frame)
+        cmd_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkLabel(
+            cmd_frame,
+            text="Командная строка:",
+            font=ctk.CTkFont(size=12, weight="bold")
+        ).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        cmd_text = ctk.CTkTextbox(cmd_frame, height=60, font=ctk.CTkFont(size=11))
+        cmd_text.pack(fill="x", padx=10, pady=(0, 10))
+        cmd_text.insert("1.0", details['cmdline'] or "Недоступно")
+        cmd_text.configure(state="disabled")
+        
+        # Сетевые соединения
+        if details['connections']:
+            conn_frame = ctk.CTkFrame(main_frame)
+            conn_frame.pack(fill="both", expand=True, pady=10)
+            
+            ctk.CTkLabel(
+                conn_frame,
+                text=f"Сетевые соединения ({len(details['connections'])}):",
+                font=ctk.CTkFont(size=12, weight="bold")
+            ).pack(anchor="w", padx=10, pady=(10, 5))
+            
+            conn_scroll = ctk.CTkScrollableFrame(conn_frame, height=150)
+            conn_scroll.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+            
+            for conn in details['connections']:
+                conn_row = ctk.CTkFrame(conn_scroll)
+                conn_row.pack(fill="x", pady=1)
+                
+                ctk.CTkLabel(
+                    conn_row,
+                    text=f"{conn['laddr']} → {conn['raddr']} [{conn['status']}]",
+                    font=ctk.CTkFont(size=11)
+                ).pack(anchor="w", padx=5)
+        
+        # Кнопка закрытия
+        ctk.CTkButton(
+            main_frame,
+            text="Закрыть",
+            command=details_window.destroy,
+            width=100
+        ).pack(pady=10)
+    
+    def kill_selected_process(self):
+        if not self._selected_process_pid:
+            return
+
+        process = next((p for p in self.processes_data
+                        if p['pid'] == self._selected_process_pid), None)
+        if not process:
+            return
+
+        if not messagebox.askyesno(
+            "Подтверждение",
+            f"Завершить процесс '{process['name']}' (PID: {process['pid']})?\n\n"
+            "Это может привести к потере несохранённых данных."
+        ):
+            return
+
+        success = self.processes_manager.kill_process(self._selected_process_pid, force=True)
+        if success:
+            self.status_manager.set_status(
+                f"Процесс '{process['name']}' завершён", "green", priority=1, timeout=3000
+            )
+            self._selected_process_pid = None
+            self.selected_process_label.configure(text="Процесс не выбран", text_color="gray")
+            self.details_btn.configure(state="disabled")
+            self.suspend_btn.configure(state="disabled")
+            self.kill_btn.configure(state="disabled")
+
+            # После kill — пересобираем список (процесс исчез)
+            self.load_processes_full()
+        else:
+            self.status_manager.set_status(
+                "Не удалось завершить процесс", "red", priority=2, timeout=3000
+            )
+            messagebox.showerror("Ошибка", "Не удалось завершить процесс.\n"
+                                            "Возможно, требуются права администратора.")
+    
+    def suspend_selected_process(self):
+        """Приостановить/возобновить выбранный процесс"""
+        if not self._selected_process_pid:
+            return
+        
+        process = next((p for p in self.processes_data if p['pid'] == self._selected_process_pid), None)
+        if not process:
+            return
+        
+        if process['status'] == 'stopped':
+            # Возобновляем
+            success = self.processes_manager.resume_process(self._selected_process_pid)
+            action = "возобновлен"
+        else:
+            # Приостанавливаем
+            success = self.processes_manager.suspend_process(self._selected_process_pid)
+            action = "приостановлен"
+        
+        if success:
+            self.status_manager.set_status(
+                f"Процесс '{process['name']}' {action}",
+                "green",
+                priority=1,
+                timeout=3000
+            )
+            self.load_processes()
+        else:
+            self.status_manager.set_status(
+                f"Не удалось изменить состояние процесса",
+                "red",
+                priority=2,
+                timeout=3000
+            )
+    
+    def toggle_auto_refresh(self):
+        if self.auto_refresh_var.get():
+            self.start_processes_auto_refresh()
+        else:
+            self.stop_processes_auto_refresh()
+
+
+    def start_processes_auto_refresh(self):
+        """Автообновление теперь вызывает load_processes_fast()."""
+        self.stop_processes_auto_refresh()
+
+        def loop():
+            if not self.running:
+                return
+            try:
+                current_tab = self.tabview.get()
+            except Exception:
+                current_tab = None
+
+            if (self.auto_refresh_var.get()
+                    and current_tab == "Процессы"
+                    and self._initial_load_done):
+                self.load_processes_fast()
+
+            # Раз в 2.5 сек — быстрое обновление цифр
+            self._processes_refresh_job = self.window.after(2500, loop)
+
+        self._processes_refresh_job = self.window.after(2500, loop)
+
+
+    def stop_processes_auto_refresh(self):
+        if self._processes_refresh_job is not None:
+            try:
+                self.window.after_cancel(self._processes_refresh_job)
+            except Exception:
+                pass
+            self._processes_refresh_job = None
+    
     def update_time_info(self):
         try:
             current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2057,5 +2949,6 @@ class BestWinTweaker:
 
     def on_closing(self):
         self.running = False
+        self.stop_processes_auto_refresh()
         self.window.quit()
         self.window.destroy()

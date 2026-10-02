@@ -31,6 +31,7 @@ class DataLoader:
             ("Материнская плата", self.load_board_data, 5),
             ("Автозагрузка", self.load_autostart_data, 15),
             ("UWP приложения", self.load_uwp_data, 20),
+            ("Процессы", self.load_processes_data, 10),
         ]
         
         total_weight = sum(task[2] for task in loading_tasks)
@@ -165,5 +166,14 @@ class DataLoader:
             remover = UWPRemover(None)
             apps = remover.get_removable_apps()
             return apps
+        except Exception as e:
+            return {'error': str(e)}
+            
+    def load_processes_data(self):
+        """Загрузка данных процессов"""
+        try:
+            from ProcessesManager import ProcessesManager
+            manager = ProcessesManager()
+            return manager.get_processes()
         except Exception as e:
             return {'error': str(e)}
