@@ -1680,7 +1680,7 @@ class BestWinTweaker:
                     'total_gb': ram.total / (1024 ** 3)
                 }
                 # Обновляем UI в главном потоке
-                self.window.after(0, self._update_ram_ui)
+                self._safe_after(0, self._update_ram_ui)
             except Exception as e:
                 print(f"RAM update error in thread: {e}")
             finally:
@@ -1729,7 +1729,7 @@ class BestWinTweaker:
                 self._disk_cache = current_disks
                 # Обновляем UI в главном потоке
                 if self.running:
-                    self.window.after(0, self._update_disk_ui)
+                    self._safe_after(0, self._update_disk_ui)
             except Exception as e:
                 print(f"Disk update error in thread: {e}")
             finally:
@@ -1898,7 +1898,7 @@ class BestWinTweaker:
                         except Exception as e:
                             print(f"WMI GPU fallback error: {e}")
                     
-                    self.window.after(0, lambda: self._update_gpu_ui(gpus))
+                    self._safe_after(0, lambda: self._update_gpu_ui(gpus))
                     self._gpu_updating = False
 
                 except Exception as e:
@@ -2161,6 +2161,18 @@ class BestWinTweaker:
         self.load_processes_full()
         self.start_processes_auto_refresh()
     
+    def _safe_after(self, delay, func, *args):
+        """Безопасный вызов window.after — игнорирует вызов, если окно закрыто."""
+        if not self.running:
+            return None
+        try:
+            if not self.window.winfo_exists():
+                return None
+            return self.window.after(delay, func, *args)
+        except (RuntimeError, tk.TclError):
+            # Окно уже уничтожено — молча выходим
+            return None
+    
     def load_processes_full(self):
         """Полное обновление списка процессов: добавляет/удаляет строки,
         читает exe, username, cmdline и т.п.
@@ -2175,10 +2187,10 @@ class BestWinTweaker:
         def worker():
             try:
                 processes = self.processes_manager.get_processes()
-                self.window.after(0, lambda: self._apply_full_processes(processes))
+                self._safe_after(0, self._apply_full_processes, processes)
             except Exception as e:
                 print(f"Full load error: {e}")
-                self.window.after(0, lambda e=e: self._processes_load_error(str(e)))
+                self._safe_after(0, self._processes_load_error, str(e))
 
         threading.Thread(target=worker, daemon=True).start()
     
@@ -2229,10 +2241,10 @@ class BestWinTweaker:
         def worker():
             try:
                 metrics = self.processes_manager.get_processes_fast()
-                self.window.after(0, lambda: self._apply_fast_processes(metrics))
+                self._safe_after(0, self._apply_fast_processes, metrics)
             except Exception as e:
                 print(f"Fast load error: {e}")
-                self.window.after(0, self._fast_update_done)
+                self._safe_after(0, self._fast_update_done)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -2367,10 +2379,10 @@ class BestWinTweaker:
         def load_in_thread():
             try:
                 processes = self.processes_manager.get_processes()
-                self.window.after(0, lambda: self._update_processes_ui(processes))
+                self._safe_after(0, self._update_processes_ui, processes)
             except Exception as e:
                 print(f"Error loading processes: {e}")
-                self.window.after(0, lambda e=e: self._processes_load_error(str(e)))
+                self._safe_after(0, self._processes_load_error, str(e))
 
         threading.Thread(target=load_in_thread, daemon=True).start()
     
@@ -2950,5 +2962,21 @@ class BestWinTweaker:
     def on_closing(self):
         self.running = False
         self.stop_processes_auto_refresh()
-        self.window.quit()
-        self.window.destroy()
+        # Отменяем все запланированные after-задачи
+        try:
+            for job in self.window.tk.call('after', 'info'):
+                try:
+                    self.window.after_cancel(job)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Даём потокам завершиться
+        time.sleep(0.1)
+
+        try:
+            self.window.quit()
+            self.window.destroy()
+        except Exception:
+            pass
