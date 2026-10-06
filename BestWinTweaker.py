@@ -2088,14 +2088,6 @@ class BestWinTweaker:
             text="Системные процессы",
             font=ctk.CTkFont(size=18, weight="bold")
         ).pack(side="left", padx=10)
-        
-        self.process_beta_label = ctk.CTkLabel(
-            top_frame,
-            text="[beta]",
-            font=ctk.CTkFont(size=20),
-            text_color="red"
-        )
-        self.process_beta_label.pack(side="left")
 
         btn_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
         btn_frame.pack(side="right")
@@ -2121,26 +2113,19 @@ class BestWinTweaker:
         self.auto_refresh_check.pack(side="left", padx=5)
 
         # ---------- Поиск ----------
-        search_frame = ctk.CTkFrame(main_frame)
-        search_frame.pack(fill="x", padx=5, pady=(0, 5))
-
-        ctk.CTkLabel(search_frame, text="Поиск:", font=ctk.CTkFont(size=13)) \
-            .pack(side="left", padx=(10, 5))
-
         self.process_search_var = tk.StringVar()
         self.process_search_var.trace_add('write', self._on_process_search_changed)
-
+               
         self.process_search_entry = ctk.CTkEntry(
-            search_frame,
+            top_frame,
             textvariable=self.process_search_var,
-            placeholder_text="Введите имя процесса или PID...",
             width=300,
             height=30
         )
         self.process_search_entry.pack(side="left", padx=5, pady=5)
 
         ctk.CTkButton(
-            search_frame,
+            top_frame,
             text="✕",
             command=lambda: self.process_search_var.set(""),
             width=30,
@@ -2149,13 +2134,12 @@ class BestWinTweaker:
             hover_color="#3a3a5a"
         ).pack(side="left", padx=2)
 
-        # ---------- Заголовки + список + панель действий ----------
+        # ---------- Заголовки + панель действий + список ----------
+        self.create_process_actions(top_frame)
         self.create_processes_header(main_frame)
-
+                
         self.processes_container = ctk.CTkScrollableFrame(main_frame, height=400)
         self.processes_container.pack(fill="both", expand=True, padx=5, pady=5)
-
-        self.create_process_actions(main_frame)
 
         # ---------- Первичная загрузка + автообновление ----------
         self.load_processes_full()
@@ -2306,27 +2290,13 @@ class BestWinTweaker:
                 width=width,
                 height=30,
                 font=ctk.CTkFont(size=11, weight="bold"),
-                fg_color="transparent",
-                hover_color="#3a3a5a",
                 anchor="w",
                 command=lambda k=sort_key: self.sort_processes(k)
             )
             btn.pack(side="left", padx=1)
     
-    def create_process_actions(self, parent):
-        """Создание панели действий с процессом"""
-        actions_frame = ctk.CTkFrame(parent)
-        actions_frame.pack(fill="x", padx=5, pady=(5, 0))
-        
-        # Информация о выбранном процессе
-        self.selected_process_label = ctk.CTkLabel(
-            actions_frame,
-            text="Процесс не выбран",
-            font=ctk.CTkFont(size=13),
-            text_color="gray"
-        )
-        self.selected_process_label.pack(side="left", padx=10)
-        
+    def create_process_actions(self, actions_frame):
+        """Создание панели действий с процессом"""       
         # Кнопки действий
         btn_frame = ctk.CTkFrame(actions_frame, fg_color="transparent")
         btn_frame.pack(side="right", padx=5)
@@ -2700,10 +2670,7 @@ class BestWinTweaker:
 
         process = next((p for p in self.processes_data if p['pid'] == pid), None)
         if process:
-            self.selected_process_label.configure(
-                text=f"Выбран: {process['name']} (PID: {pid})",
-                text_color=("black", "white"),
-            )
+            self.status_manager.set_status(f"Выбран: {process['name']} (PID: {pid})", "green", priority=1, timeout=3000)
             self.details_btn.configure(state="normal")
             self.kill_btn.configure(state="normal")
             self.suspend_btn.configure(
@@ -2847,7 +2814,7 @@ class BestWinTweaker:
                 f"Процесс '{process['name']}' завершён", "green", priority=1, timeout=3000
             )
             self._selected_process_pid = None
-            self.selected_process_label.configure(text="Процесс не выбран", text_color="gray")
+            self.status_manager.set_status("Процесс не выбран", "gray", priority=1, timeout=3000)
             self.details_btn.configure(state="disabled")
             self.suspend_btn.configure(state="disabled")
             self.kill_btn.configure(state="disabled")
