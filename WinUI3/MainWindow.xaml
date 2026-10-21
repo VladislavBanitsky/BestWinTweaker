@@ -1,0 +1,77 @@
+<Window
+    x:Class="BestWinTweaker.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Window.SystemBackdrop>
+        <DesktopAcrylicBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid>
+        <NavigationView x:Name="NavView"
+                        PaneDisplayMode="Top"
+                        IsBackButtonVisible="Collapsed"
+                        SelectionChanged="NavView_SelectionChanged"
+                        IsSettingsVisible="False">
+
+            <!-- Переключатель темы справа -->
+            <NavigationView.PaneFooter>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE706;" FontSize="16" Margin="0,0,8,0"/>
+                    <!-- Иконка солнца (светлая тема) -->
+                    <ToggleSwitch x:Name="ThemeToggle" 
+                                  OffContent="" 
+                                  OnContent="" 
+                                  Toggled="ThemeToggle_Toggled"
+                                  VerticalAlignment="Center"
+                                  Margin="0"
+                                  MinWidth="0" 
+                                  Padding="0"/>
+                    <FontIcon Glyph="&#xE708;" FontSize="16" Margin="0"/>
+                    <!-- Иконка луны (тёмная тема) -->
+                </StackPanel>
+            </NavigationView.PaneFooter>
+
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Мониторинг" Tag="monitor" IsSelected="True">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D9;"/>
+                        <!-- Иконка монитора/графика -->
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Процессы" Tag="processes">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9F5;"/>
+                        <!-- Иконка списка/процессов -->
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Оптимизация" Tag="optimize">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE945;"/>
+                        <!-- Иконка скорости/оптимизации -->
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Автозагрузка" Tag="autostart">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7B8;"/>
+                        <!-- Иконка обновления/запуска -->
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="UWP" Tag="uwp">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE71D;"/>
+                        <!-- Иконка приложения/плитки -->
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="О программе" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;"/>
+                        <!-- Иконка информации -->
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <Frame x:Name="ContentFrame"/>
+        </NavigationView>
+    </Grid>
+</Window>

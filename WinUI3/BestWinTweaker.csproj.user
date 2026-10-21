@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <DebuggerFlavor>ProjectDebugger</DebuggerFlavor>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ActiveDebugProfile>BestWinTweaker (Unpackaged)</ActiveDebugProfile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Update="App.xaml">
+      <SubType>Designer</SubType>
+    </None>
+    <None Update="MainWindow.xaml">
+      <SubType>Designer</SubType>
+    </None>
+    <None Update="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </None>
+    <Page Update="Views\AboutPage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Views\UwpPage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Views\AutostartPage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Views\OptimizePage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Views\ProcessesPage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Views\MonitorPage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+</Project>

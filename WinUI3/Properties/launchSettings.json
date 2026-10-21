@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "BestWinTweaker (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "BestWinTweaker (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

@@ -1,0 +1,38 @@
+<Page
+    x:Class="BestWinTweaker.Views.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" MaxWidth="600">
+
+            <!-- Логотип -->
+            <Image Source="ms-appx:///Assets/BestWinTweaker.png" 
+                   Width="200" Height="200" 
+                   HorizontalAlignment="Center" 
+                   Margin="0,0,0,16"/>
+
+            <!-- Заголовок -->
+            <TextBlock Text="BestWinTweaker" 
+                       FontSize="32" FontWeight="Bold" 
+                       HorizontalAlignment="Center"/>
+
+            <TextBlock Text="Ускорение ПК в пару кликов!" 
+                       FontSize="16" Foreground="Gray" 
+                       HorizontalAlignment="Center"/>
+
+            <!-- Версия -->
+            <TextBlock x:Name="VersionText"
+                       FontSize="14" 
+                       HorizontalAlignment="Center" 
+                       Margin="0,8,0,16"/>
+
+            <!-- Ссылка на GitHub через HyperlinkButton -->
+            <HyperlinkButton Content="GitHub: VladislavBanitsky"
+                             NavigateUri="https://github.com/VladislavBanitsky/BestWinTweaker"
+                             HorizontalAlignment="Center"
+                             FontSize="16"/>
+
+        </StackPanel>
+    </Grid>
+</Page>
