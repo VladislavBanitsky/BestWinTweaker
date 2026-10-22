@@ -13,6 +13,11 @@ public partial class MonitorViewModel : ObservableObject
     private readonly MonitorService _monitorService = new();
     private bool _isRefreshing;
 
+    [ObservableProperty]
+    private bool _isGpuLoading = true;
+
+    [ObservableProperty]
+    private bool _isDiskLoading = true;
     private readonly HardwareSensorService _sensorService;
 
     [ObservableProperty]
@@ -68,6 +73,12 @@ public partial class MonitorViewModel : ObservableObject
     [ObservableProperty]
     private string _ramUsageText = "0 GB / 0 GB";
 
+    [ObservableProperty]
+    private string _ramModel = "Загрузка...";
+
+    [ObservableProperty]
+    private string _ramDdrType = "Загрузка...";
+
     public ObservableCollection<DiskInfo> Disks { get; } = new();
 
     public MonitorViewModel(HardwareSensorService sensorService)
@@ -84,24 +95,12 @@ public partial class MonitorViewModel : ObservableObject
 
         try
         {
+            // Загрузка данных процессора
             var cpu = await Task.Run(() => _monitorService.GetCpuInfo());
             CpuName = cpu.Name;
             CpuUsage = cpu.UsagePercent;
             CpuFrequency = cpu.FrequencyMhz;
             CoresText = $"Ядер: {cpu.LogicalCores} логических, {cpu.PhysicalCores} физических";
-
-            var ram = await Task.Run(() => _monitorService.GetRamInfo());
-            RamPercent = ram.Percent;
-            RamUsageText = $"{ram.UsedGb:F1} GB / {ram.TotalGb:F1} GB";
-
-            System.Diagnostics.Debug.WriteLine($"[RAM] Percent: {ram.Percent}%, Used: {ram.UsedGb} GB");
-            RamPercent = ram.Percent;
-            RamUsageText = $"{ram.UsedGb:F1} GB / {ram.TotalGb:F1} GB";
-
-            var disks = await Task.Run(() => _monitorService.GetDisks());
-            Disks.Clear();
-            foreach (var d in disks)
-                Disks.Add(d);
 
             var cpuTemps = await Task.Run(() => _sensorService.GetCpuTemperatures());
             if (cpuTemps.PackageTempC > 0)
@@ -111,17 +110,21 @@ public partial class MonitorViewModel : ObservableObject
             else
                 CpuTemperature = "—";
 
-            // Загрузка данных материнской платы
-            BoardModel = await Task.Run(() => _monitorService.GetBoardModel());
+            // Загрузка данных оперативной памяти
+            var ram = await Task.Run(() => _monitorService.GetRamInfo());
+            RamPercent = ram.Percent;
+            RamUsageText = $"{ram.UsedGb:F1} GB / {ram.TotalGb:F1} GB";
 
-            // Загрузка данных сети
-            var net = await Task.Run(() => _monitorService.GetNetworkInfo());
-            NetworkAdapter = net.adapter;
-            DownloadSpeed = net.download;
-            UploadSpeed = net.upload;
-            TotalDownloadGb = net.totalDownload;
-            TotalUploadGb = net.totalUpload;
+            System.Diagnostics.Debug.WriteLine($"[RAM] Percent: {ram.Percent}%, Used: {ram.UsedGb} GB");
+            RamPercent = ram.Percent;
+            RamUsageText = $"{ram.UsedGb:F1} GB / {ram.TotalGb:F1} GB";
 
+            var ramDetails = await Task.Run(() => _monitorService.GetRamDetails());
+            RamModel = ramDetails.Model;
+            RamDdrType = ramDetails.DdrType; ;
+
+
+            // Загрузка данных видеокарты
             var gpus = await Task.Run(() => _sensorService.GetGpus());
             Gpus.Clear();
             foreach (var g in gpus)
@@ -136,7 +139,26 @@ public partial class MonitorViewModel : ObservableObject
                 GpuMemoryText = primary.MemoryTotalMb > 0
                     ? $"{primary.MemoryUsedMb:F0} / {primary.MemoryTotalMb:F0} MB ({primary.MemoryPercent:F1}%)"
                     : "—";
+                IsGpuLoading = false;
             }
+
+            // Загрузка данных материнской платы
+            BoardModel = await Task.Run(() => _monitorService.GetBoardModel());
+
+            // Загрузка данных сети
+            var net = await Task.Run(() => _monitorService.GetNetworkInfo());
+            NetworkAdapter = net.adapter;
+            DownloadSpeed = net.download;
+            UploadSpeed = net.upload;
+            TotalDownloadGb = net.totalDownload;
+            TotalUploadGb = net.totalUpload;
+
+            // Загрузка данных дисков
+            var disks = await Task.Run(() => _monitorService.GetDisks());
+            Disks.Clear();
+            foreach (var d in disks)
+                Disks.Add(d);
+            IsDiskLoading = false;
         }
         finally
         {
