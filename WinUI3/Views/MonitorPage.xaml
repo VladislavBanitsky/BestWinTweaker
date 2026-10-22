@@ -2,7 +2,13 @@
     x:Class="BestWinTweaker.Views.MonitorPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:models="using:BestWinTweaker.Models">
+    xmlns:models="using:BestWinTweaker.Models"
+    xmlns:converters="using:BestWinTweaker.Converters">
+
+    <Page.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+    </Page.Resources>
 
     <ScrollViewer>
         <Grid Padding="20" ColumnSpacing="16">
@@ -55,6 +61,10 @@
                     <StackPanel Spacing="8">
                         <TextBlock Text="RAM — Оперативная память"
                                    FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock FontSize="14">
+                            <Run Text="{x:Bind ViewModel.RamModel, Mode=OneWay}"/>
+                            <Run Text="{x:Bind ViewModel.RamDdrType, Mode=OneWay}"/>
+                        </TextBlock>
                         <ProgressBar Value="{x:Bind ViewModel.RamPercent, Mode=OneWay}"
                                      Maximum="100" Height="10"/>
                         <Grid>
@@ -74,11 +84,12 @@
                         CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Text="GPU — Видеокарта" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="Загрузка..." Visibility="{x:Bind ViewModel.IsGpuLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Gpus, Mode=OneWay}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:GpuInfo">
                                     <StackPanel Spacing="4" Margin="0,4">
-                                        <TextBlock Text="{x:Bind Name}" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{x:Bind Name}" FontSize="14"/>
                                         <ProgressBar Value="{x:Bind LoadPercent}" Maximum="100" Height="8"/>
                                         <Grid>
                                             <TextBlock FontSize="14">
@@ -154,16 +165,16 @@
                         CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Text="Диски" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="Загрузка..." Visibility="{x:Bind ViewModel.IsDiskLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Disks, Mode=OneWay}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:DiskInfo">
                                     <StackPanel Spacing="4" Margin="0,4">
                                         <Grid>
-                                            <TextBlock FontSize="14" FontWeight="SemiBold">
+                                            <TextBlock FontSize="14">
                                                 <Run Text="{x:Bind Device}"/>
-                                                <Run Text=" ("/>
                                                 <Run Text="{x:Bind DiskType}"/>
-                                                <Run Text=")"/>
+                                                <Run Text="{x:Bind Model}"/>
                                             </TextBlock>
                                         </Grid>
                                         <ProgressBar Value="{x:Bind Percent}" Maximum="100" Height="8"/>
