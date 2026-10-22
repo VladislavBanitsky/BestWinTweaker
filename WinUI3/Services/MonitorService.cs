@@ -107,7 +107,8 @@ public class MonitorService
                     TotalGb = totalGb,
                     UsedGb = usedGb,
                     Percent = percent,
-                    DiskType = GetDiskType(drive.Name)
+                    DiskType = GetDiskType(drive.Name),
+                    Model = GetDiskModel(drive.Name)
                 });
             }
         }
@@ -185,6 +186,53 @@ public class MonitorService
         return 0;
     }
 
+    public (string Model, string DdrType) GetRamDetails()
+    {
+        string model = "Неизвестно";
+        string ddrType = "Неизвестно";
+
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT Manufacturer, PartNumber, SMBIOSMemoryType FROM Win32_PhysicalMemory");
+
+            var first = true;
+            foreach (var obj in searcher.Get())
+            {
+                if (first)
+                {
+                    // Модель: Manufacturer + PartNumber
+                    var manufacturer = obj["Manufacturer"]?.ToString()?.Trim();
+                    var partNumber = obj["PartNumber"]?.ToString()?.Trim();
+                    model = $"{manufacturer} {partNumber}".Trim();
+                    if (string.IsNullOrEmpty(model)) model = "Неизвестно";
+
+                    // Тип DDR через SMBIOSMemoryType (надёжнее, чем MemoryType)
+                    if (obj["SMBIOSMemoryType"] != null)
+                    {
+                        int type = Convert.ToInt32(obj["SMBIOSMemoryType"]);
+                        ddrType = type switch
+                        {
+                            20 => "DDR",
+                            21 => "DDR2",
+                            22 => "DDR2 FB-DIMM",
+                            24 => "DDR3",
+                            26 => "DDR4",
+                            34 => "DDR5",
+                            35 => "LPDDR5",
+                            _ => $"Unknown ({type})"
+                        };
+                    }
+                    first = false;
+                }
+                // Если несколько планок, можно собрать информацию со всех, но для простоты берём первую
+            }
+        }
+        catch { }
+
+        return (model, ddrType);
+    }
+
     private static string GetDiskType(string driveLetter)
     {
         // Упрощённо: определяем SSD/HDD через PowerShell (можно заменить на WMI).
@@ -211,14 +259,56 @@ public class MonitorService
         return "Unknown";
     }
 
+    private string GetDiskModel(string driveLetter)
+    {
+        try
+        {
+            // Используем PowerShell для получения модели физического диска
+            var psi = new ProcessStartInfo
+            {
+                FileName = "powershell",
+                Arguments = $"-Command \"(Get-PhysicalDisk | Where-Object {{$_.DeviceId -eq (Get-Partition -DriveLetter {driveLetter[0]} | Get-Disk).Number}}).FriendlyName\"",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var p = Process.Start(psi);
+            if (p != null)
+            {
+                var output = p.StandardOutput.ReadToEnd().Trim();
+                p.WaitForExit(2000);
+                if (!string.IsNullOrEmpty(output))
+                    return output;
+            }
+        }
+        catch { }
+        return "Неизвестно";
+    }
+
     public string GetBoardModel()
     {
         try
         {
-            using var searcher = new System.Management.ManagementObjectSearcher("SELECT * FROM Win32_BaseBoard");
-            foreach (System.Management.ManagementObject obj in searcher.Get())
+            // Сначала пробуем Win32_BaseBoard (для десктопов и некоторых ноутбуков)
+            using var boardSearcher = new ManagementObjectSearcher("SELECT Manufacturer, Product FROM Win32_BaseBoard");
+            foreach (var obj in boardSearcher.Get())
             {
-                return $"{obj["Manufacturer"]} {obj["Product"]}";
+                var manufacturer = obj["Manufacturer"]?.ToString()?.Trim();
+                var product = obj["Product"]?.ToString()?.Trim();
+                var result = $"{manufacturer} {product}".Trim();
+                if (!string.IsNullOrEmpty(result) && result != "System manufacturer System Product Name")
+                    return result;
+            }
+
+            // Fallback: Win32_ComputerSystem (часто содержит модель ноутбука)
+            using var csSearcher = new ManagementObjectSearcher("SELECT Manufacturer, Model FROM Win32_ComputerSystem");
+            foreach (var obj in csSearcher.Get())
+            {
+                var manufacturer = obj["Manufacturer"]?.ToString()?.Trim();
+                var model = obj["Model"]?.ToString()?.Trim();
+                var result = $"{manufacturer} {model}".Trim();
+                if (!string.IsNullOrEmpty(result))
+                    return result;
             }
         }
         catch { }
