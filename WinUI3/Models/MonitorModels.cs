@@ -8,6 +8,7 @@ public class DiskInfo
     public double TotalGb { get; set; }
     public double Percent { get; set; }
     public string DiskType { get; set; } = string.Empty;
+    public string Model { get; set; } = string.Empty;
 }
 
 public class CpuInfo
