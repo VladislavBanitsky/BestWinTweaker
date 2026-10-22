@@ -23,6 +23,12 @@
 	  <FileVersion>1.9.29.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Helpers\**" />
+    <EmbeddedResource Remove="Helpers\**" />
+    <None Remove="Helpers\**" />
+    <Page Remove="Helpers\**" />
+  </ItemGroup>
+  <ItemGroup>
     <None Remove="Views\AboutPage.xaml" />
     <None Remove="Views\AutostartPage.xaml" />
     <None Remove="Views\MonitorPage.xaml" />
@@ -65,9 +71,6 @@
     <PackageReference Include="System.Management" Version="10.0.13" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.13" />
     <PackageReference Include="TaskScheduler" Version="2.12.2" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Helpers\" />
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\AboutPage.xaml">
@@ -117,4 +120,7 @@
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
     <ApplicationIcon>BestWinTweaker.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <PRIResource Remove="Helpers\**" />
+  </ItemGroup>
 </Project>
