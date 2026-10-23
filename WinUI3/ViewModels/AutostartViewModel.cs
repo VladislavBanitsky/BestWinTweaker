@@ -36,18 +36,8 @@ public partial class AutostartViewModel : ObservableObject
         IsBusy = true;
         StatusMessage = "Загрузка списка автозагрузки...";
 
+        // Сервис УЖЕ возвращает объединенный список (реестр + Планировщик + бэкап)
         var entries = await Task.Run(() => _service.GetStartupEntries());
-        var backup = await Task.Run(() => _service.LoadBackup());
-
-        // Добавляем записи из бэкапа, которых нет в системе
-        var currentNames = new HashSet<string>(
-            entries.Select(e => $"{e.Name}|{e.Source}"),
-            StringComparer.OrdinalIgnoreCase);
-        foreach (var b in backup)
-        {
-            if (!currentNames.Contains($"{b.Name}|{b.Source}"))
-                entries.Add(b);
-        }
 
         _allEntries = entries.OrderBy(e => e.Name).ToList();
 
@@ -87,20 +77,16 @@ public partial class AutostartViewModel : ObservableObject
             bool success;
             if (entry.Enabled)
             {
-                // Передаем entry.Path
+                // Передаем entry.Path (при включении сервис сам удалит запись из бэкапа)
                 success = await Task.Run(() => _service.Enable(entry.Name, entry.Source, entry.Path));
             }
             else
             {
-                // Передаем entry.Path
+                // Передаем entry.Path (при отключении сервис сам сохранит путь в бэкап)
                 success = await Task.Run(() => _service.Disable(entry.Name, entry.Source, entry.Path));
-                if (success)
-                {
-                    await Task.Run(() => _service.SaveBackup(
-                        Entries.Where(e => !e.Enabled)));
-                }
             }
             if (success) changed++;
+            else failed++;
         }
 
         if (failed > 0)
