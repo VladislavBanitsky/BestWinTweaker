@@ -69,17 +69,39 @@ public class StartupService
             using var key = hive.OpenSubKey(subKey);
             if (key == null) return;
 
+            // Получаем список отключенных программ для этой ветки
+            var disabledInApproved = GetDisabledFromStartupApproved(hive, source);
+
             foreach (var name in key.GetValueNames())
             {
                 if (string.IsNullOrEmpty(name) || !seen.Add(name)) continue;
+
                 var path = key.GetValue(name)?.ToString() ?? string.Empty;
+
+                // Программа считается выключенной, если её имя есть в списке отключенных StartupApproved
+                // (или её exe-имя, что часто бывает с Discord/Яндексом)
+                bool isEnabled = true;
+
+                if (disabledInApproved.Contains(name))
+                {
+                    isEnabled = false;
+                }
+                else
+                {
+                    // Проверяем по имени exe (если путь указывает на Update.exe или browser.exe)
+                    var exeName = GetExeName(path);
+                    if (!string.IsNullOrEmpty(exeName) && disabledInApproved.Contains(exeName))
+                    {
+                        isEnabled = false;
+                    }
+                }
 
                 result.Add(new StartupEntry
                 {
                     Name = name,
                     Path = path,
                     Source = source,
-                    Enabled = true, // Если ключ есть в Run - значит он включен
+                    Enabled = isEnabled, // Выставляем реальный статус
                     IsFromBackup = false
                 });
             }
@@ -183,7 +205,7 @@ public class StartupService
     {
         try
         {
-            // 1. Включаем в системе
+            // 1. Включаем в системе (реестр, планировщик или папка)
             if (source == "Планировщик")
             {
                 using var ts = new TaskService();
@@ -202,15 +224,99 @@ public class StartupService
                 // Реестр: создаем ключ
                 var hive = source.StartsWith("HKCU") ? Registry.CurrentUser : Registry.LocalMachine;
                 var runKeyPath = source.Contains("32-bit") ? RunKey32 : RunKey;
+
                 using var runKey = hive.CreateSubKey(runKeyPath, writable: true);
                 if (!string.IsNullOrEmpty(path)) runKey.SetValue(name, path, RegistryValueKind.String);
+
+                // Обновляем StartupApproved для реестра
+                try
+                {
+                    // Путь к StartupApproved (Run или Run32 в зависимости от источника)
+                    string approvedSubKey = source.Contains("32-bit")
+                        ? @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32"
+                        : @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+                    using var approvedKey = hive.CreateSubKey(approvedSubKey, writable: true);
+                    if (approvedKey != null)
+                    {
+                        // Флаг 02 00 00 00 ... означает "Включено"
+                        // Windows использует первые байты для статуса. 02 или 06 = включено. 03 или 07 = отключено
+                        byte[] enabledFlag = new byte[] { 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+                        // Записываем флаг под именем программы
+                        approvedKey.SetValue(name, enabledFlag, RegistryValueKind.Binary);
+
+                        // Дополнительно можно записать под именем exe, если оно отличается
+                        var exeName = GetExeName(path);
+                        if (!string.IsNullOrEmpty(exeName) && exeName != name)
+                        {
+                            approvedKey.SetValue(exeName, enabledFlag, RegistryValueKind.Binary);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Enable] Ошибка записи в StartupApproved: {ex.Message}");
+                }
             }
 
-            // 2. Удаляем из бэкапа (запись теперь активна)
+            // 2. Удаляем из нашего JSON-бэкапа (запись теперь активна)
             RemoveFromBackup(name, source);
             return true;
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Enable] Общая ошибка: {ex.Message}");
+            return false;
+        }
+    }
+
+    private string GetExeName(string path)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+            var cleanPath = path.Trim('"');
+            if (cleanPath.Contains("\" "))
+                cleanPath = cleanPath.Split('"')[1];
+            else if (!cleanPath.Contains("\"") && cleanPath.Contains(" "))
+                cleanPath = cleanPath.Split(' ')[0];
+
+            return Path.GetFileName(cleanPath);
+        }
+        catch { return string.Empty; }
+    }
+
+    private HashSet<string> GetDisabledFromStartupApproved(RegistryKey hive, string source)
+    {
+        var disabledNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Определяем путь к StartupApproved в зависимости от ветки (32-bit или обычная)
+        string approvedSubKey = source.Contains("32-bit")
+            ? @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32"
+            : @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+        try
+        {
+            using var approvedKey = hive.OpenSubKey(approvedSubKey);
+            if (approvedKey == null) return disabledNames;
+
+            foreach (var name in approvedKey.GetValueNames())
+            {
+                if (approvedKey.GetValue(name) is byte[] bytes && bytes.Length >= 1)
+                {
+                    // Байт 0x02 или 0x06 = включено. Байт 0x03 или 0x07 = отключено.
+                    // Если первый байт НЕ 02 и НЕ 06, значит программа отключена (обычно 03).
+                    if (bytes[0] != 0x02 && bytes[0] != 0x06 && bytes[0] != 0x00)
+                    {
+                        disabledNames.Add(name);
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return disabledNames;
     }
 
     private void SaveBackup(List<StartupBackupEntry> backup)
