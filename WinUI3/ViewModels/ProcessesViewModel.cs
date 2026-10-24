@@ -14,6 +14,7 @@ public partial class ProcessesViewModel : ObservableObject
 {
     private readonly ProcessService _processService;
     private bool _isRefreshing;
+    //private bool _isFastRefreshing = false;
     private List<ProcessInfo> _allProcesses = new();
 
     [ObservableProperty]
@@ -51,6 +52,45 @@ public partial class ProcessesViewModel : ObservableObject
         }
         finally { _isRefreshing = false; }
     }
+
+    //[RelayCommand]
+    //private async Task RefreshFastAsync()
+    //{
+    //    System.Diagnostics.Debug.WriteLine($"[VM] Обновлено процессов: {Processes.Count}");
+    //    if (_isFastRefreshing) return;
+    //    _isFastRefreshing = true;
+
+    //    try
+    //    {
+    //        // Получаем быстрые метрики в фоне
+    //        var metrics = await Task.Run(() => _processService.GetProcessesFast());
+
+    //        // Обновляем существующие элементы в коллекции
+    //        foreach (var process in _allProcesses)
+    //        {
+    //            if (metrics.TryGetValue(process.Pid, out var data))
+    //            {
+    //                process.CpuPercent = data.Cpu;
+    //                process.MemoryMb = data.MemoryMb;
+
+    //                // Если процесс перестал отвечать
+    //                if (process.Status != data.Status)
+    //                {
+    //                    process.Status = data.Status;
+    //                    // Обновите текст и цвет статуса, если они привязаны к Status
+    //                }
+    //            }
+    //        }
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        System.Diagnostics.Debug.WriteLine($"[FastRefresh] Ошибка: {ex.Message}");
+    //    }
+    //    finally
+    //    {
+    //        _isFastRefreshing = false; // Обязательно сбрасываем флаг
+    //    }
+    //}
 
     [RelayCommand]
     private async Task KillSelectedAsync()
