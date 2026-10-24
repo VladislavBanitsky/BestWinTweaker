@@ -285,33 +285,63 @@ public class MonitorService
         return "Неизвестно";
     }
 
+    // Проверка, является ли устройство ноутбуком (по наличию батареи)
+    private bool IsLaptop()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Battery");
+            return searcher.Get().Count > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public string GetBoardModel()
     {
         try
         {
-            // Сначала пробуем Win32_BaseBoard (для десктопов и некоторых ноутбуков)
-            using var boardSearcher = new ManagementObjectSearcher("SELECT Manufacturer, Product FROM Win32_BaseBoard");
-            foreach (var obj in boardSearcher.Get())
+            if (IsLaptop())
             {
-                var manufacturer = obj["Manufacturer"]?.ToString()?.Trim();
-                var product = obj["Product"]?.ToString()?.Trim();
-                var result = $"{manufacturer} {product}".Trim();
-                if (!string.IsNullOrEmpty(result) && result != "System manufacturer System Product Name")
-                    return result;
-            }
+                // Если есть батарея — это ноутбук. Берем модель из Win32_ComputerSystem
+                using var csSearcher = new ManagementObjectSearcher("SELECT Manufacturer, Model FROM Win32_ComputerSystem");
+                foreach (var obj in csSearcher.Get())
+                {
+                    var manufacturer = obj["Manufacturer"]?.ToString()?.Trim() ?? "";
+                    var model = obj["Model"]?.ToString()?.Trim() ?? "";
 
-            // Fallback: Win32_ComputerSystem (часто содержит модель ноутбука)
-            using var csSearcher = new ManagementObjectSearcher("SELECT Manufacturer, Model FROM Win32_ComputerSystem");
-            foreach (var obj in csSearcher.Get())
+                    // Отсекаем стандартные заглушки Windows
+                    if (model == "System Product Name" || model == "To Be Filled By O.E.M.") continue;
+
+                    var result = $"{manufacturer} {model}".Trim();
+                    if (!string.IsNullOrEmpty(result)) return result;
+                }
+            }
+            else
             {
-                var manufacturer = obj["Manufacturer"]?.ToString()?.Trim();
-                var model = obj["Model"]?.ToString()?.Trim();
-                var result = $"{manufacturer} {model}".Trim();
-                if (!string.IsNullOrEmpty(result))
-                    return result;
+                // Если батареи нет — это десктоп. Берем модель материнской платы.
+                using var boardSearcher = new ManagementObjectSearcher("SELECT Manufacturer, Product FROM Win32_BaseBoard");
+                foreach (var obj in boardSearcher.Get())
+                {
+                    var manufacturer = obj["Manufacturer"]?.ToString()?.Trim() ?? "";
+                    var product = obj["Product"]?.ToString()?.Trim() ?? "";
+
+                    // Отсекаем стандартные заглушки
+                    if (product == "System Product Name" || product == "To Be Filled By O.E.M.") continue;
+
+                    var result = $"{manufacturer} {product}".Trim();
+                    if (!string.IsNullOrEmpty(result)) return result;
+                }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Board] Ошибка: {ex.Message}");
+        }
+
+        // Если ничего не нашли или произошла ошибка
         return "Неизвестно";
     }
 
@@ -337,11 +367,11 @@ public class MonitorService
             // ВАЖНО: отсекаем виртуальные адаптеры (Loopback, Tunnel, и т.д.)
             var activeInterface = NetworkInterface.GetAllNetworkInterfaces()
                 .Where(n => n.OperationalStatus == OperationalStatus.Up
-                         && n.NetworkInterfaceType != NetworkInterfaceType.Loopback
-                         && n.NetworkInterfaceType != NetworkInterfaceType.Tunnel
-                         && !n.Description.Contains("Virtual", StringComparison.OrdinalIgnoreCase)
-                         && !n.Description.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase)
-                         && !n.Description.Contains("VPN", StringComparison.OrdinalIgnoreCase))
+                            && n.NetworkInterfaceType != NetworkInterfaceType.Loopback
+                            && n.NetworkInterfaceType != NetworkInterfaceType.Tunnel
+                            && !n.Description.Contains("Virtual", StringComparison.OrdinalIgnoreCase)
+                            && !n.Description.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase)
+                            && !n.Description.Contains("VPN", StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(n => n.GetIPStatistics().BytesReceived)
                 .FirstOrDefault();
 

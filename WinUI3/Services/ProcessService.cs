@@ -102,6 +102,46 @@ public class ProcessService
         return result.OrderByDescending(x => x.CpuPercent).ToList();
     }
 
+    //public Dictionary<int, (double Cpu, double MemoryMb, string Status)> GetProcessesFast()
+    //{
+    //    System.Diagnostics.Debug.WriteLine($"[Fast] Старт. Elapsed: {(DateTime.Now - _lastCheck).TotalMilliseconds} мс");
+    //    // Явно указываем имена в типе словаря
+    //    var result = new Dictionary<int, (double Cpu, double MemoryMb, string Status)>();
+    //    var processes = Process.GetProcesses();
+    //    var now = DateTime.Now;
+    //    var elapsed = (now - _lastCheck).TotalMilliseconds;
+    //    if (elapsed <= 0) elapsed = 100;
+
+    //    foreach (var p in processes)
+    //    {
+    //        try
+    //        {
+    //            var cpuTime = p.TotalProcessorTime;
+    //            double cpuPercent = 0;
+
+    //            if (_lastCpuTimes.TryGetValue(p.Id, out var lastTime))
+    //            {
+    //                var deltaMs = (cpuTime - lastTime).TotalMilliseconds;
+    //                cpuPercent = Math.Round(deltaMs / elapsed / Environment.ProcessorCount * 100, 1);
+    //            }
+    //            _lastCpuTimes[p.Id] = cpuTime;
+
+    //            double memMb = Math.Round(p.WorkingSet64 / 1024.0 / 1024.0, 1);
+
+    //            string status = "Running";
+    //            try { if (!p.Responding) status = "NotResponding"; } catch { }
+
+    //            result[p.Id] = (cpuPercent, memMb, status);
+    //        }
+    //        catch { /* Игнорируем мертвые процессы */ }
+    //        finally { p.Dispose(); }
+    //    }
+
+    //    _lastCheck = now;
+    //    System.Diagnostics.Debug.WriteLine($"[Fast] Процессов: {result.Count}. Пример CPU: {result.Values.FirstOrDefault().Cpu}%");
+    //    return result;
+    //}
+
     public bool KillProcess(int pid)
     {
         try
