@@ -59,12 +59,12 @@
                             <ColumnDefinition Width="80"/>
                             <ColumnDefinition Width="90"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{x:Bind Pid}"/>
-                        <TextBlock Grid.Column="1" Text="{x:Bind Name}" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" Text="{x:Bind CpuPercent}"/>
-                        <TextBlock Grid.Column="3" Text="{x:Bind MemoryPercent}"/>
-                        <TextBlock Grid.Column="4" Text="{x:Bind MemoryMb}"/>
-                        <TextBlock Grid.Column="5" Text="{x:Bind StatusText}"
+                        <TextBlock Text="{x:Bind Pid, Mode=OneWay}"/>
+                        <TextBlock Grid.Column="1" Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="2" Text="{x:Bind CpuPercent, Mode=OneWay}"/>
+                        <TextBlock Grid.Column="3" Text="{x:Bind MemoryPercent, Mode=OneWay}"/>
+                        <TextBlock Grid.Column="4" Text="{x:Bind MemoryMb, Mode=OneWay}"/>
+                        <TextBlock Grid.Column="5" Text="{x:Bind StatusText, Mode=OneWay}"
                                    Foreground="{x:Bind StatusColor}"/>
                     </Grid>
                 </DataTemplate>

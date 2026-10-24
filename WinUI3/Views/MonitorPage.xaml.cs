@@ -3,6 +3,7 @@ using BestWinTweaker.ViewModels;
 using Microsoft.UI.Xaml; // Для DispatcherTimer
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.ApplicationModel.DataTransfer;
 using System;
 
 namespace BestWinTweaker.Views;
@@ -53,5 +54,29 @@ public sealed partial class MonitorPage : Page
         await ViewModel.RefreshCommand.ExecuteAsync(null);
     }
 
+    // Копирование полей 
+    private void CopyText_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string text && !string.IsNullOrEmpty(text))
+        {
+            var dataPackage = new DataPackage();
+            dataPackage.SetText(text);
+            Clipboard.SetContent(dataPackage);
 
+            // Можно добавить визуальное подтверждение (например, изменить иконку на галочку на секунду)
+            var icon = btn.Content as FontIcon;
+            if (icon != null)
+            {
+                icon.Glyph = "\uE73E"; // Иконка галочки (CheckMark)
+                                       // Вернуть обратно через 1.5 секунды (можно использовать DispatcherTimer)
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+                timer.Tick += (s, args) =>
+                {
+                    icon.Glyph = "\uE8C8"; // Возвращаем иконку копирования
+                    timer.Stop();
+                };
+                timer.Start();
+            }
+        }
+    }
 }

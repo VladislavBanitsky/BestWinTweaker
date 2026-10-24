@@ -28,8 +28,14 @@
                     <StackPanel Spacing="8">
                         <TextBlock Text="CPU — Центральный процессор"
                                    FontSize="16" FontWeight="SemiBold"/>
-                        <TextBlock Text="{x:Bind ViewModel.CpuName, Mode=OneWay}"
-                                   FontSize="14" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{x:Bind ViewModel.CpuName, Mode=OneWay}"
+                                       FontSize="14" TextWrapping="Wrap"/>
+                            <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.CpuName, Mode=OneWay}" 
+                                    Background="Transparent" BorderThickness="0" Padding="4" ToolTipService.ToolTip="Копировать">
+                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
+                            </Button>
+                        </StackPanel>
                         <ProgressBar Value="{x:Bind ViewModel.CpuUsage, Mode=OneWay}"
                                      Maximum="100" Height="10"/>
                         <Grid>
@@ -61,10 +67,16 @@
                     <StackPanel Spacing="8">
                         <TextBlock Text="RAM — Оперативная память"
                                    FontSize="16" FontWeight="SemiBold"/>
-                        <TextBlock FontSize="14">
-                            <Run Text="{x:Bind ViewModel.RamModel, Mode=OneWay}"/>
-                            <Run Text="{x:Bind ViewModel.RamDdrType, Mode=OneWay}"/>
-                        </TextBlock>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock FontSize="14">
+                                <Run Text="{x:Bind ViewModel.RamModel, Mode=OneWay}"/>
+                                <Run Text="{x:Bind ViewModel.RamDdrType, Mode=OneWay}"/>
+                            </TextBlock>
+                            <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.RamModel, Mode=OneWay}" 
+                                    Background="Transparent" BorderThickness="0" Padding="4">
+                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
+                            </Button>
+                        </StackPanel>
                         <ProgressBar Value="{x:Bind ViewModel.RamPercent, Mode=OneWay}"
                                      Maximum="100" Height="10"/>
                         <Grid>
@@ -89,7 +101,13 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:GpuInfo">
                                     <StackPanel Spacing="4" Margin="0,4">
-                                        <TextBlock Text="{x:Bind Name}" FontSize="14"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{x:Bind Name}" FontSize="14"/>
+                                            <Button Click="CopyText_Click" Tag="{x:Bind Name, Mode=OneWay}" 
+                                                    Background="Transparent" BorderThickness="0" Padding="4">
+                                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
+                                            </Button>
+                                        </StackPanel>
                                         <ProgressBar Value="{x:Bind LoadPercent}" Maximum="100" Height="8"/>
                                         <Grid>
                                             <TextBlock FontSize="14">
@@ -121,8 +139,14 @@
                         CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Text="Материнская плата" FontSize="16" FontWeight="SemiBold"/>
-                        <TextBlock Text="{x:Bind ViewModel.BoardModel, Mode=OneWay}" 
-                                   FontSize="14" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{x:Bind ViewModel.BoardModel, Mode=OneWay}" 
+                                       FontSize="14" TextWrapping="Wrap"/>
+                            <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.BoardModel, Mode=OneWay}" 
+                                    Background="Transparent" BorderThickness="0" Padding="4">
+                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
+                            </Button>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -131,8 +155,14 @@
                         CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Text="Сеть" FontSize="16" FontWeight="SemiBold"/>
-                        <TextBlock Text="{x:Bind ViewModel.NetworkAdapter, Mode=OneWay}" 
-                                   FontSize="14" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{x:Bind ViewModel.NetworkAdapter, Mode=OneWay}" 
+                                       FontSize="14" TextWrapping="Wrap"/>
+                            <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.NetworkAdapter, Mode=OneWay}" 
+                                    Background="Transparent" BorderThickness="0" Padding="4">
+                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
+                            </Button>
+                        </StackPanel>
                         <Grid>
                             <TextBlock FontSize="14">
                                 <Run Text="Загрузка: "/>
@@ -171,11 +201,17 @@
                                 <DataTemplate x:DataType="models:DiskInfo">
                                     <StackPanel Spacing="4" Margin="0,4">
                                         <Grid>
-                                            <TextBlock FontSize="14">
-                                                <Run Text="{x:Bind Device}"/>
-                                                <Run Text="{x:Bind DiskType}"/>
-                                                <Run Text="{x:Bind Model}"/>
-                                            </TextBlock>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock FontSize="14">
+                                                    <Run Text="{x:Bind Device}"/>
+                                                    <Run Text="{x:Bind DiskType}"/>
+                                                    <Run Text="{x:Bind Model}"/>
+                                                </TextBlock>
+                                                <Button Click="CopyText_Click" Tag="{x:Bind Model, Mode=OneWay}" 
+                                                        Background="Transparent" BorderThickness="0" Padding="4">
+                                                    <FontIcon Glyph="&#xE8C8;" FontSize="10"/>
+                                                </Button>
+                                            </StackPanel>
                                         </Grid>
                                         <ProgressBar Value="{x:Bind Percent}" Maximum="100" Height="8"/>
                                         <TextBlock FontSize="14">
