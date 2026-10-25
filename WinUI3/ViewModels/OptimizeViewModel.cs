@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using Windows.ApplicationModel.DataTransfer; // Для копирования
 
 namespace BestWinTweaker.ViewModels;
 
@@ -15,6 +16,15 @@ public partial class OptimizeViewModel : ObservableObject
 
     [ObservableProperty]
     private string _statusMessage = "Готов";
+
+    [ObservableProperty]
+    private string _pingResult = string.Empty;
+
+    [ObservableProperty]
+    private string _pingHostName = string.Empty; // Имя хоста для копирования
+
+    [ObservableProperty]
+    private bool _hasPingResult = false; // Показывать ли кнопку копирования
 
     public OptimizeViewModel()
     {
@@ -74,8 +84,8 @@ public partial class OptimizeViewModel : ObservableObject
     {
         IsBusy = true;
         StatusMessage = "Загрузка обоев Bing...";
-        var success = await _tweaker.SetBingWallpaperAsync();
-        StatusMessage = success ? "Обои Bing установлены!" : "Ошибка загрузки";
+        var (success, message) = await _tweaker.SetBingWallpaperAsync();
+        StatusMessage = success ? $"Обои Bing установлены! {message}" : "Ошибка загрузки";
         IsBusy = false;
     }
 
@@ -135,8 +145,23 @@ public partial class OptimizeViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(host)) return;
         IsBusy = true;
         StatusMessage = $"Проверка {host}...";
-        var (success, result) = await _tweaker.PingAsync(host);
-        StatusMessage = result;
+        HasPingResult = false; // Сбрасываем предыдущий результат
+        var (success, hostName, fullResult) = await _tweaker.PingAsync(host);
+        StatusMessage = fullResult;
+        PingHostName = hostName; // Сохраняем имя хоста для копирования
+        HasPingResult = true; // Показываем кнопку копирования
         IsBusy = false;
+    }
+
+    [RelayCommand]
+    private void CopyPingResult()
+    {
+        if (string.IsNullOrEmpty(PingHostName)) return;
+
+        var dataPackage = new DataPackage();
+        dataPackage.SetText(PingHostName);
+        Clipboard.SetContent(dataPackage);
+        StatusMessage = $"Скопировано: {PingHostName}";
+        HasPingResult = false; // Показываем кнопку копирования
     }
 }
