@@ -13,8 +13,7 @@
 
         <!-- Панель управления -->
         <StackPanel Orientation="Horizontal" Spacing="10">
-            <TextBlock Text="Управление UWP-приложениями" 
-                       FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+            <TextBlock Text="Управление UWP-приложениями" VerticalAlignment="Center" Style="{StaticResource TitleTextBlockStyle}"/>
             <Button Content="Обновить" Command="{x:Bind ViewModel.LoadAppsCommand}" 
                     IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource InverseBoolConverter}}"/>
             <Button Content="Выбрать безопасные" Command="{x:Bind ViewModel.SelectAllSafeCommand}"

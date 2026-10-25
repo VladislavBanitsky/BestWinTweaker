@@ -5,15 +5,14 @@
     xmlns:converters="using:BestWinTweaker.Converters">
 
     <Page.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
         <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
     </Page.Resources>
 
-    <Grid RowDefinitions="*,Auto" Padding="20">
+    <Grid RowDefinitions="*,Auto" Padding="16">
         <ScrollViewer>
             <StackPanel Spacing="16">
-                <TextBlock Text="Инструменты оптимизации системы"
-                   FontSize="22" FontWeight="Bold" Margin="0,0,0,10"/>
-
+                <TextBlock Text="Инструменты оптимизации системы" VerticalAlignment="Center" Style="{StaticResource TitleTextBlockStyle}"/>
                 <Grid ColumnSpacing="12" RowSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -53,8 +52,24 @@
         <!-- Статусная строка -->
         <Border Grid.Row="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 CornerRadius="6" Padding="12" Margin="0,10,0,0">
-            <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                       FontSize="13"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                       FontSize="13" VerticalAlignment="Center"/>
+                <!-- Кнопка копирования (появляется только после пинга) -->
+                <Button Grid.Column="1"
+                    Command="{x:Bind ViewModel.CopyPingResultCommand}"
+                    Visibility="{x:Bind ViewModel.HasPingResult, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                    Background="Transparent" BorderThickness="0"
+                    ToolTipService.ToolTip="Копировать имя хоста">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
         </Border>
     </Grid>
 </Page>

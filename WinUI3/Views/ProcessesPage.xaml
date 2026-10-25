@@ -8,11 +8,13 @@
     <Page.Resources>
         <converters:NullToBoolConverter x:Key="NullToBoolConverter"/>
     </Page.Resources>
+    <!-- 4 строки: Заголовок, Панель управления, Шапка таблицы, Список -->
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Padding="16" RowSpacing="8">
 
-    <Grid RowDefinitions="Auto,Auto,*" Padding="16" RowSpacing="8">
+        <TextBlock Text="Управление процессами" VerticalAlignment="Center" Style="{StaticResource TitleTextBlockStyle}"/>
 
         <!-- Панель управления -->
-        <StackPanel Orientation="Horizontal" Spacing="10">
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="10">
             <TextBox PlaceholderText="Поиск по имени или PID..."
                      Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Width="280"/>
@@ -26,7 +28,7 @@
         </StackPanel>
 
         <!-- Заголовки таблицы -->
-        <Grid Grid.Row="1" ColumnSpacing="4" Padding="8,4">
+        <Grid Grid.Row="2" ColumnSpacing="4" Padding="8,4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="60"/>
                 <ColumnDefinition Width="200"/>
@@ -44,7 +46,8 @@
         </Grid>
 
         <!-- Список процессов -->
-        <ListView Grid.Row="2"
+        <ListView x:Name="ProcessListView" 
+                  Grid.Row="3"
                   ItemsSource="{x:Bind ViewModel.Processes, Mode=OneWay}"
                   SelectedItem="{x:Bind ViewModel.SelectedProcess, Mode=TwoWay}"
                   SelectionMode="Single">

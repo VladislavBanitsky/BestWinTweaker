@@ -4,11 +4,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:BestWinTweaker.Models">
 
-    <Grid RowDefinitions="Auto,*,Auto" Padding="16" RowSpacing="8">
+    <Grid RowDefinitions="Auto,*,Auto" Padding="16" RowSpacing="12">
 
         <StackPanel Orientation="Horizontal" Spacing="10">
-            <TextBlock Text="Управление автозагрузкой"
-                       FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+            <TextBlock Text="Управление автозагрузкой" VerticalAlignment="Center" Style="{StaticResource TitleTextBlockStyle}"/>
             <Button Content="Обновить" Command="{x:Bind ViewModel.RefreshCommand}"/>
             <Button Content="Выбрать все" Command="{x:Bind ViewModel.SelectAllCommand}"/>
             <Button Content="Снять все" Command="{x:Bind ViewModel.DeselectAllCommand}"/>

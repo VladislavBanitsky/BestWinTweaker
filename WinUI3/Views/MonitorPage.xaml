@@ -11,226 +11,228 @@
     </Page.Resources>
 
     <ScrollViewer>
-        <Grid Padding="20" ColumnSpacing="16">
-            <Grid.ColumnDefinitions>
-                <!-- Левая колонка -->
-                <ColumnDefinition Width="*"/>
-                <!-- Правая колонка -->
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+        <StackPanel Spacing="16" Padding="16">
+            <TextBlock Text="Мониторинг системы" VerticalAlignment="Center" Style="{StaticResource TitleTextBlockStyle}"/>
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <!-- Левая колонка -->
+                    <ColumnDefinition Width="*"/>
+                    <!-- Правая колонка -->
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-            <!-- ================= ЛЕВАЯ КОЛОНКА ================= -->
-            <StackPanel Grid.Column="0" Spacing="16">
-
-                <!-- CPU -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="CPU — Центральный процессор"
-                                   FontSize="16" FontWeight="SemiBold"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="{x:Bind ViewModel.CpuName, Mode=OneWay}"
-                                       FontSize="14" TextWrapping="Wrap"/>
-                            <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.CpuName, Mode=OneWay}" 
-                                    Background="Transparent" BorderThickness="0" Padding="4" ToolTipService.ToolTip="Копировать">
-                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
-                            </Button>
+                <!-- ================= ЛЕВАЯ КОЛОНКА ================= -->
+                <StackPanel Grid.Column="0" Spacing="16">
+                    <!-- CPU -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="CPU — Центральный процессор"
+                                       FontSize="16" FontWeight="SemiBold"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{x:Bind ViewModel.CpuName, Mode=OneWay}"
+                                           FontSize="14" TextWrapping="Wrap"/>
+                                <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.CpuName, Mode=OneWay}" 
+                                        Background="Transparent" BorderThickness="0" Padding="4" ToolTipService.ToolTip="Копировать">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
+                                </Button>
+                            </StackPanel>
+                            <ProgressBar Value="{x:Bind ViewModel.CpuUsage, Mode=OneWay}"
+                                         Maximum="100" Height="10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{x:Bind ViewModel.CoresText, Mode=OneWay}"
+                                           FontSize="14"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="20">
+                                    <TextBlock FontSize="14">
+                                        <Run Text="Загрузка: "/>
+                                        <Run Text="{x:Bind ViewModel.CpuUsage, Mode=OneWay}"/>
+                                        <Run Text="%"/>
+                                    </TextBlock>
+                                    <TextBlock FontSize="14">
+                                        <Run Text="Частота: "/>
+                                        <Run Text="{x:Bind ViewModel.CpuFrequency, Mode=OneWay}"/>
+                                        <Run Text=" MHz"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
-                        <ProgressBar Value="{x:Bind ViewModel.CpuUsage, Mode=OneWay}"
-                                     Maximum="100" Height="10"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{x:Bind ViewModel.CoresText, Mode=OneWay}"
-                                       FontSize="14"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="20">
+                    </Border>
+
+                    <!-- RAM -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="RAM — Оперативная память"
+                                       FontSize="16" FontWeight="SemiBold"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock FontSize="14">
-                                    <Run Text="Загрузка: "/>
-                                    <Run Text="{x:Bind ViewModel.CpuUsage, Mode=OneWay}"/>
+                                    <Run Text="{x:Bind ViewModel.RamModel, Mode=OneWay}"/>
+                                    <Run Text="{x:Bind ViewModel.RamDdrType, Mode=OneWay}"/>
+                                </TextBlock>
+                                <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.RamModel, Mode=OneWay}" 
+                                        Background="Transparent" BorderThickness="0" Padding="4">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
+                                </Button>
+                            </StackPanel>
+                            <ProgressBar Value="{x:Bind ViewModel.RamPercent, Mode=OneWay}"
+                                         Maximum="100" Height="10"/>
+                            <Grid>
+                                <TextBlock FontSize="14">
+                                    <Run Text="Использовано: "/>
+                                    <Run Text="{x:Bind ViewModel.RamPercent, Mode=OneWay}"/>
                                     <Run Text="%"/>
                                 </TextBlock>
-                                <TextBlock FontSize="14">
-                                    <Run Text="Частота: "/>
-                                    <Run Text="{x:Bind ViewModel.CpuFrequency, Mode=OneWay}"/>
-                                    <Run Text=" MHz"/>
-                                </TextBlock>
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
-                <!-- RAM -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="RAM — Оперативная память"
-                                   FontSize="16" FontWeight="SemiBold"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock FontSize="14">
-                                <Run Text="{x:Bind ViewModel.RamModel, Mode=OneWay}"/>
-                                <Run Text="{x:Bind ViewModel.RamDdrType, Mode=OneWay}"/>
-                            </TextBlock>
-                            <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.RamModel, Mode=OneWay}" 
-                                    Background="Transparent" BorderThickness="0" Padding="4">
-                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
-                            </Button>
+                                <TextBlock Text="{x:Bind ViewModel.RamUsageText, Mode=OneWay}"
+                                           FontSize="14" HorizontalAlignment="Right"/>
+                            </Grid>
                         </StackPanel>
-                        <ProgressBar Value="{x:Bind ViewModel.RamPercent, Mode=OneWay}"
-                                     Maximum="100" Height="10"/>
-                        <Grid>
-                            <TextBlock FontSize="14">
-                                <Run Text="Использовано: "/>
-                                <Run Text="{x:Bind ViewModel.RamPercent, Mode=OneWay}"/>
-                                <Run Text="%"/>
-                            </TextBlock>
-                            <TextBlock Text="{x:Bind ViewModel.RamUsageText, Mode=OneWay}"
-                                       FontSize="14" HorizontalAlignment="Right"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
+                    </Border>
 
-                <!-- GPU -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="GPU — Видеокарта" FontSize="16" FontWeight="SemiBold"/>
-                        <TextBlock Text="Загрузка..." Visibility="{x:Bind ViewModel.IsGpuLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
-                        <ItemsControl ItemsSource="{x:Bind ViewModel.Gpus, Mode=OneWay}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:GpuInfo">
-                                    <StackPanel Spacing="4" Margin="0,4">
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Text="{x:Bind Name}" FontSize="14"/>
-                                            <Button Click="CopyText_Click" Tag="{x:Bind Name, Mode=OneWay}" 
-                                                    Background="Transparent" BorderThickness="0" Padding="4">
-                                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
-                                            </Button>
-                                        </StackPanel>
-                                        <ProgressBar Value="{x:Bind LoadPercent}" Maximum="100" Height="8"/>
-                                        <Grid>
-                                            <TextBlock FontSize="14">
-                                                <Run Text="Загрузка: "/>
-                                                <Run Text="{x:Bind LoadPercent}"/>
-                                                <Run Text="%  |  Температура: "/>
-                                                <Run Text="{x:Bind TemperatureC}"/>
-                                                <Run Text="°C  |  Память: "/>
-                                                <Run Text="{x:Bind MemoryUsedMb}"/>
-                                                <Run Text="/"/>
-                                                <Run Text="{x:Bind MemoryTotalMb}"/>
-                                                <Run Text=" MB"/>
-                                            </TextBlock>
-                                        </Grid>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-            </StackPanel>
-
-            <!-- ================= ПРАВАЯ КОЛОНКА ================= -->
-            <StackPanel Grid.Column="1" Spacing="16">
-
-                <!-- Материнская плата -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="Материнская плата" FontSize="16" FontWeight="SemiBold"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="{x:Bind ViewModel.BoardModel, Mode=OneWay}" 
-                                       FontSize="14" TextWrapping="Wrap"/>
-                            <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.BoardModel, Mode=OneWay}" 
-                                    Background="Transparent" BorderThickness="0" Padding="4">
-                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
-                            </Button>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Сеть -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="Сеть" FontSize="16" FontWeight="SemiBold"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="{x:Bind ViewModel.NetworkAdapter, Mode=OneWay}" 
-                                       FontSize="14" TextWrapping="Wrap"/>
-                            <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.NetworkAdapter, Mode=OneWay}" 
-                                    Background="Transparent" BorderThickness="0" Padding="4">
-                                <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
-                            </Button>
-                        </StackPanel>
-                        <Grid>
-                            <TextBlock FontSize="14">
-                                <Run Text="Загрузка: "/>
-                                <Run Text="{x:Bind ViewModel.DownloadSpeed, Mode=OneWay}"/>
-                                <Run Text=" MB/s"/>
-                            </TextBlock>
-                            <TextBlock FontSize="14" HorizontalAlignment="Right">
-                                <Run Text="Отдача: "/>
-                                <Run Text="{x:Bind ViewModel.UploadSpeed, Mode=OneWay}"/>
-                                <Run Text=" MB/s"/>
-                            </TextBlock>
-                        </Grid>
-                        <Grid>
-                            <TextBlock FontSize="14">
-                                <Run Text="Всего скачано: "/>
-                                <Run Text="{x:Bind ViewModel.TotalDownloadGb, Mode=OneWay}"/>
-                                <Run Text=" GB"/>
-                            </TextBlock>
-                            <TextBlock FontSize="14" HorizontalAlignment="Right">
-                                <Run Text="Всего отправлено: "/>
-                                <Run Text="{x:Bind ViewModel.TotalUploadGb, Mode=OneWay}"/>
-                                <Run Text=" GB"/>
-                            </TextBlock>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
-                <!-- Диски -->
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="Диски" FontSize="16" FontWeight="SemiBold"/>
-                        <TextBlock Text="Загрузка..." Visibility="{x:Bind ViewModel.IsDiskLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
-                        <ItemsControl ItemsSource="{x:Bind ViewModel.Disks, Mode=OneWay}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:DiskInfo">
-                                    <StackPanel Spacing="4" Margin="0,4">
-                                        <Grid>
+                    <!-- GPU -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="GPU — Видеокарта" FontSize="16" FontWeight="SemiBold"/>
+                            <TextBlock Text="Загрузка..." Visibility="{x:Bind ViewModel.IsGpuLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.Gpus, Mode=OneWay}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:GpuInfo">
+                                        <StackPanel Spacing="4" Margin="0,4">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <TextBlock FontSize="14">
-                                                    <Run Text="{x:Bind Device}"/>
-                                                    <Run Text="{x:Bind DiskType}"/>
-                                                    <Run Text="{x:Bind Model}"/>
-                                                </TextBlock>
-                                                <Button Click="CopyText_Click" Tag="{x:Bind Model, Mode=OneWay}" 
+                                                <TextBlock Text="{x:Bind Name}" FontSize="14"/>
+                                                <Button Click="CopyText_Click" Tag="{x:Bind Name, Mode=OneWay}" 
                                                         Background="Transparent" BorderThickness="0" Padding="4">
-                                                    <FontIcon Glyph="&#xE8C8;" FontSize="10"/>
+                                                    <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
                                                 </Button>
                                             </StackPanel>
-                                        </Grid>
-                                        <ProgressBar Value="{x:Bind Percent}" Maximum="100" Height="8"/>
-                                        <TextBlock FontSize="14">
-                                            <Run Text="Использовано: "/>
-                                            <Run Text="{x:Bind Percent}"/>
-                                            <Run Text="% ("/>
-                                            <Run Text="{x:Bind UsedGb}"/>
-                                            <Run Text="/"/>
-                                            <Run Text="{x:Bind TotalGb}"/>
-                                            <Run Text=" GB)"/>
-                                        </TextBlock>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
+                                            <ProgressBar Value="{x:Bind LoadPercent}" Maximum="100" Height="8"/>
+                                            <Grid>
+                                                <TextBlock FontSize="14">
+                                                    <Run Text="Загрузка: "/>
+                                                    <Run Text="{x:Bind LoadPercent}"/>
+                                                    <Run Text="%  |  Температура: "/>
+                                                    <Run Text="{x:Bind TemperatureC}"/>
+                                                    <Run Text="°C  |  Память: "/>
+                                                    <Run Text="{x:Bind MemoryUsedMb}"/>
+                                                    <Run Text="/"/>
+                                                    <Run Text="{x:Bind MemoryTotalMb}"/>
+                                                    <Run Text=" MB"/>
+                                                </TextBlock>
+                                            </Grid>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
 
-            </StackPanel>
-        </Grid>
+                </StackPanel>
+
+                <!-- ================= ПРАВАЯ КОЛОНКА ================= -->
+                <StackPanel Grid.Column="1" Spacing="16">
+
+                    <!-- Материнская плата -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Материнская плата" FontSize="16" FontWeight="SemiBold"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{x:Bind ViewModel.BoardModel, Mode=OneWay}" 
+                                           FontSize="14" TextWrapping="Wrap"/>
+                                <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.BoardModel, Mode=OneWay}" 
+                                        Background="Transparent" BorderThickness="0" Padding="4">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Сеть -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Сеть" FontSize="16" FontWeight="SemiBold"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{x:Bind ViewModel.NetworkAdapter, Mode=OneWay}" 
+                                           FontSize="14" TextWrapping="Wrap"/>
+                                <Button Click="CopyText_Click" Tag="{x:Bind ViewModel.NetworkAdapter, Mode=OneWay}" 
+                                        Background="Transparent" BorderThickness="0" Padding="4">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="12"/>
+                                </Button>
+                            </StackPanel>
+                            <Grid>
+                                <TextBlock FontSize="14">
+                                    <Run Text="Загрузка: "/>
+                                    <Run Text="{x:Bind ViewModel.DownloadSpeed, Mode=OneWay}"/>
+                                    <Run Text=" MB/s"/>
+                                </TextBlock>
+                                <TextBlock FontSize="14" HorizontalAlignment="Right">
+                                    <Run Text="Отдача: "/>
+                                    <Run Text="{x:Bind ViewModel.UploadSpeed, Mode=OneWay}"/>
+                                    <Run Text=" MB/s"/>
+                                </TextBlock>
+                            </Grid>
+                            <Grid>
+                                <TextBlock FontSize="14">
+                                    <Run Text="Всего скачано: "/>
+                                    <Run Text="{x:Bind ViewModel.TotalDownloadGb, Mode=OneWay}"/>
+                                    <Run Text=" GB"/>
+                                </TextBlock>
+                                <TextBlock FontSize="14" HorizontalAlignment="Right">
+                                    <Run Text="Всего отправлено: "/>
+                                    <Run Text="{x:Bind ViewModel.TotalUploadGb, Mode=OneWay}"/>
+                                    <Run Text=" GB"/>
+                                </TextBlock>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Диски -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Диски" FontSize="16" FontWeight="SemiBold"/>
+                            <TextBlock Text="Загрузка..." Visibility="{x:Bind ViewModel.IsDiskLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.Disks, Mode=OneWay}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:DiskInfo">
+                                        <StackPanel Spacing="4" Margin="0,4">
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock FontSize="14">
+                                                        <Run Text="{x:Bind Device}"/>
+                                                        <Run Text="{x:Bind DiskType}"/>
+                                                        <Run Text="{x:Bind Model}"/>
+                                                    </TextBlock>
+                                                    <Button Click="CopyText_Click" Tag="{x:Bind Model, Mode=OneWay}" 
+                                                            Background="Transparent" BorderThickness="0" Padding="4">
+                                                        <FontIcon Glyph="&#xE8C8;" FontSize="10"/>
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                            <ProgressBar Value="{x:Bind Percent}" Maximum="100" Height="8"/>
+                                            <TextBlock FontSize="14">
+                                                <Run Text="Использовано: "/>
+                                                <Run Text="{x:Bind Percent}"/>
+                                                <Run Text="% ("/>
+                                                <Run Text="{x:Bind UsedGb}"/>
+                                                <Run Text="/"/>
+                                                <Run Text="{x:Bind TotalGb}"/>
+                                                <Run Text=" GB)"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </Grid>
+        </StackPanel>
     </ScrollViewer>
 </Page>
