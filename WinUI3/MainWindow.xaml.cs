@@ -4,6 +4,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Storage;
 using System;
 using Windows.Graphics;
 using WinRT.Interop;
@@ -29,23 +30,87 @@ public sealed partial class MainWindow : Window
         // Установка иконки заголовка
         appWindow.SetIcon("BestWinTweaker.ico");
 
-        // Центрируем окно на экране
-        var displayArea = DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Nearest);
-        if (displayArea != null)
-        {
-            var centeredPosition = new PointInt32(
-                (displayArea.WorkArea.Width - 1400) / 2,
-                (displayArea.WorkArea.Height - 690) / 2
-            );
-            appWindow.Move(centeredPosition);
-        }
-
         // Получаем ConfigManager из DI
         _configManager = App.GetService<ConfigManager>();
 
-        // Загружаем сохраненную тему при старте
+        // Загружаем сохраненную тему
         var savedTheme = _configManager.GetTheme();
         ApplyTheme(savedTheme);
+
+        // Применяем размеры окна и его расположение
+        RestoreWindowBounds();
+
+        // Подписываемся на закрытие
+        this.Closed += MainWindow_Closed;
+
+    }
+
+    private void MainWindow_Closed(object sender, WindowEventArgs args)
+    {
+        var appWindow = this.AppWindow;
+        if (appWindow == null) return;
+
+        // Определяем, развернуто ли окно
+        bool isMaximized = false;
+        if (appWindow.Presenter is OverlappedPresenter presenter)
+        {
+            isMaximized = presenter.State == OverlappedPresenterState.Maximized;
+        }
+
+        // Сохраняем в наш JSON-файл
+        _configManager.SaveWindowBounds(
+            appWindow.Position.X,
+            appWindow.Position.Y,
+            appWindow.Size.Width,
+            appWindow.Size.Height,
+            isMaximized
+        );
+    }
+
+    private void RestoreWindowBounds()
+    {
+        var appWindow = this.AppWindow;
+        var bounds = _configManager.LoadWindowBounds();
+
+        if (bounds.HasValue)
+        {
+            var (x, y, width, height, isMaximized) = bounds.Value;
+
+            // Восстанавливаем размер и позицию
+            appWindow.MoveAndResize(new RectInt32(x, y, width, height));
+
+            // Если было развернуто — разворачиваем
+            if (isMaximized && appWindow.Presenter is OverlappedPresenter presenter)
+            {
+                presenter.Maximize();
+            }
+        }
+        else
+        {
+            // Если настроек нет — ставим размер по умолчанию и центрируем
+            appWindow.Resize(new SizeInt32(1400, 690));
+
+            // Центрирование
+            CenterWindow(appWindow);
+        }
+    }
+
+    private void CenterWindow(AppWindow appWindow)
+    {
+        // Получаем DisplayArea для текущего окна
+        var displayArea = DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Nearest);
+        if (displayArea == null) return;
+
+        // Берем РАБОЧУЮ область (исключает панель задач)
+        var workArea = displayArea.WorkArea;
+
+        // Вычисляем позицию для центрирования внутри рабочей области
+        var centeredPosition = new PointInt32(
+            workArea.X + (workArea.Width - 1400) / 2,
+            workArea.Y + (workArea.Height - 690) / 2
+        );
+
+        appWindow.Move(centeredPosition);
     }
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
