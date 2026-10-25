@@ -1,8 +1,10 @@
 ﻿using BestWinTweaker.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using System.Threading.Tasks;
+using Microsoft.UI;
+using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer; // Для копирования
 
 namespace BestWinTweaker.ViewModels;
@@ -11,11 +13,10 @@ public partial class OptimizeViewModel : ObservableObject
 {
     private readonly TweakerService _tweaker = new();
 
-    [ObservableProperty]
-    private bool _isBusy;
+    public StatusManager Status { get; } = new();
 
     [ObservableProperty]
-    private string _statusMessage = "Готов";
+    private bool _isBusy;
 
     [ObservableProperty]
     private string _pingResult = string.Empty;
@@ -29,6 +30,7 @@ public partial class OptimizeViewModel : ObservableObject
     public OptimizeViewModel()
     {
         UpdateIndexingText();
+        Status.StatusChanged += OnStatusChanged;
     }
 
     [ObservableProperty]
@@ -41,13 +43,31 @@ public partial class OptimizeViewModel : ObservableObject
             : "Включить индексацию";
     }
 
+    private void OnStatusChanged(object? sender, EventArgs e)
+    {
+        // Если статус не начинается с "Проверка" и не содержит "Скопировано",
+        // значит, это результат другой команды — прячем кнопку копирования.
+        if (!Status.Text.StartsWith("Проверка") && !Status.Text.StartsWith("Скопировано") && !Status.Text.StartsWith("Узел"))
+        {
+            HasPingResult = false;
+            _pingHostName = string.Empty;
+        }
+    }
+
     [RelayCommand]
     private async Task FixUpdatesAsync()
     {
         IsBusy = true;
-        StatusMessage = "Исправление ошибок обновлений...";
+        Status.SetStatus("Исправление ошибок обновлений...", Colors.Orange, 0);
         var success = await _tweaker.FixUpdatesAsync();
-        StatusMessage = success ? "Службы обновлений перезапущены" : "Ошибка";
+        if (success)
+        {
+            Status.SetStatus("Службы обновлений перезапущены", Colors.White);
+        }
+        else
+        {
+            Status.SetStatus("Ошибка", Colors.Red);
+        }
         IsBusy = false;
     }
 
@@ -58,12 +78,12 @@ public partial class OptimizeViewModel : ObservableObject
         if (_tweaker.IsIndexingEnabled())
         {
             _tweaker.DisableIndexing();
-            StatusMessage = "Индексация отключена";
+            Status.SetStatus("Индексация отключена", Colors.White);
         }
         else
         {
             _tweaker.EnableIndexing();
-            StatusMessage = "Индексация включена";
+            Status.SetStatus("Индексация включена", Colors.White);
         }
         UpdateIndexingText();
         IsBusy = false;
@@ -73,9 +93,16 @@ public partial class OptimizeViewModel : ObservableObject
     private async Task DownloadWindowsAsync()
     {
         IsBusy = true;
-        StatusMessage = "Запуск Fido для скачивания Windows...";
+        Status.SetStatus("Запуск Fido для скачивания Windows...", Colors.Orange, 0);
         var success = await _tweaker.StartWindowsDownloadAsync();
-        StatusMessage = success ? "Окно PowerShell открыто" : "Ошибка";
+        if (success)
+        {
+            Status.SetStatus("Открыто окно Fido", Colors.White);
+        }
+        else
+        {
+            Status.SetStatus("Ошибка", Colors.Red);
+        }
         IsBusy = false;
     }
 
@@ -83,9 +110,16 @@ public partial class OptimizeViewModel : ObservableObject
     private async Task SetBingWallpaperAsync()
     {
         IsBusy = true;
-        StatusMessage = "Загрузка обоев Bing...";
+        Status.SetStatus("Загрузка обоев Bing...", Colors.Orange, 0);
         var (success, message) = await _tweaker.SetBingWallpaperAsync();
-        StatusMessage = success ? $"Обои Bing установлены! {message}" : "Ошибка загрузки";
+        if (success)
+        {
+            Status.SetStatus($"Обои Bing установлены! {message}", Colors.White);
+        }
+        else
+        {
+            Status.SetStatus("Ошибка загрузки", Colors.Red);
+        }
         IsBusy = false;
     }
 
@@ -93,27 +127,54 @@ public partial class OptimizeViewModel : ObservableObject
     private async Task RemoveWatermarkAsync()
     {
         IsBusy = true;
-        StatusMessage = "Удаление водяного знака (требуются права администратора)...";
+        Status.SetStatus("Запуск UWD...", Colors.Orange, 0);
         var success = await _tweaker.RemoveWatermarkAsync();
-        StatusMessage = success ? "Водяной знак удален" : "Ошибка";
+        if (success)
+        {
+            Status.SetStatus("Водяной знак удалён", Colors.White);
+        }
+        else
+        {
+            Status.SetStatus("Ошибка", Colors.Red);
+        }
         IsBusy = false;
+    }
+
+    [RelayCommand]
+    private void OpenTaskManager()
+    {
+        Process.Start(new ProcessStartInfo { FileName = "taskmgr.exe", UseShellExecute = true });
+        Status.SetStatus("Открыто Диспетчер задач", Colors.White);
+    }
+
+    [RelayCommand]
+    private void OpenDeviceManager()
+    {
+        Process.Start(new ProcessStartInfo { FileName = "devmgmt.msc", UseShellExecute = true });
+        Status.SetStatus("Открыт Диспетчер устройств", Colors.White);
     }
 
     [RelayCommand]
     private void OpenDiskManagement()
     {
         Process.Start(new ProcessStartInfo { FileName = "diskmgmt.msc", UseShellExecute = true });
+        Status.SetStatus("Открыто Управление дисками", Colors.White);
     }
 
     [RelayCommand]
     private async Task ClearTempAsync()
     {
         IsBusy = true;
-        StatusMessage = "Очистка временных файлов...";
+        Status.SetStatus("Очистка временных файлов...", Colors.Orange, 0);
         var (deleted, error) = await Task.Run(() => _tweaker.ClearTemp());
-        StatusMessage = error == null
-            ? $"Очищено {deleted} файлов и папок"
-            : $"Очищено {deleted}, ошибки: {error}";
+        if (error == null)
+        {
+            Status.SetStatus($"Очищено {deleted} файлов и папок", Colors.White);
+        }
+        else
+        {
+            Status.SetStatus($"Очищено {deleted}, ошибки: {error}", Colors.Red);
+        }
         IsBusy = false;
     }
 
@@ -121,11 +182,16 @@ public partial class OptimizeViewModel : ObservableObject
     private async Task DisableTelemetryAsync()
     {
         IsBusy = true;
-        StatusMessage = "Отключение служб телеметрии...";
+        Status.SetStatus("Отключение служб телеметрии...", Colors.Orange, 0);
         var (disabled, errors) = await Task.Run(() => _tweaker.DisableTelemetry());
-        StatusMessage = errors == null
-            ? $"Отключено {disabled} служб"
-            : $"Отключено {disabled}, ошибки: {errors}";
+        if (errors == null)
+        {
+            Status.SetStatus($"Отключено {disabled} служб", Colors.White);
+        }
+        else
+        {
+            Status.SetStatus($"Отключено {disabled}, ошибки: {errors}", Colors.Red);
+        }
         IsBusy = false;
     }
 
@@ -133,9 +199,16 @@ public partial class OptimizeViewModel : ObservableObject
     private async Task FlushDnsAsync()
     {
         IsBusy = true;
-        StatusMessage = "Очистка DNS кэша...";
+        Status.SetStatus("Очистка DNS кэша...", Colors.Orange, 0);
         var success = await Task.Run(() => _tweaker.FlushDns(out _));
-        StatusMessage = success ? "DNS кэш очищен" : "Ошибка очистки DNS";
+        if (success)
+        {
+            Status.SetStatus("DNS кэш очищен", Colors.White);
+        }
+        else
+        {
+            Status.SetStatus("Ошибка очистки DNS", Colors.Red);
+        }
         IsBusy = false;
     }
 
@@ -143,13 +216,20 @@ public partial class OptimizeViewModel : ObservableObject
     private async Task PingAsync(string host)
     {
         if (string.IsNullOrWhiteSpace(host)) return;
+
         IsBusy = true;
-        StatusMessage = $"Проверка {host}...";
-        HasPingResult = false; // Сбрасываем предыдущий результат
+        HasPingResult = false;
+        Status.SetStatus($"Проверка {host}...", Colors.Orange, 0);
         var (success, hostName, fullResult) = await _tweaker.PingAsync(host);
-        StatusMessage = fullResult;
-        PingHostName = hostName; // Сохраняем имя хоста для копирования
-        HasPingResult = true; // Показываем кнопку копирования
+        // СНАЧАЛА сохраняем данные для копирования
+        PingHostName = hostName;
+        HasPingResult = true;
+        // ПОТОМ меняем статус (событие OnStatusChanged увидит, что статус начинается с "Узел" и не сбросит кнопку)
+        if (success)
+            Status.SetStatus(fullResult, Colors.White);
+        else
+            Status.SetStatus(fullResult, Colors.Red);
+
         IsBusy = false;
     }
 
@@ -161,7 +241,7 @@ public partial class OptimizeViewModel : ObservableObject
         var dataPackage = new DataPackage();
         dataPackage.SetText(PingHostName);
         Clipboard.SetContent(dataPackage);
-        StatusMessage = $"Скопировано: {PingHostName}";
-        HasPingResult = false; // Показываем кнопку копирования
+        Status.SetStatus($"Скопировано: {PingHostName}", Colors.White);
+        HasPingResult = false; // Прячем кнопку копирования
     }
 }
