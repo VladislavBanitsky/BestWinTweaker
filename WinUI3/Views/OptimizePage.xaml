@@ -42,31 +42,35 @@
                     <Button Grid.Row="2" Grid.Column="2" Content="Проверить пинг" Click="PingButton_Click" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="60"/>
 
                     <!-- Ряд 4 -->
-                    <Button Grid.Row="3" Grid.Column="1" Content="Диспетчер устройств" Click="OpenDeviceManager_Click" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="60"/>
+                    <Button Grid.Row="3" Grid.Column="1" Content="Диспетчер устройств" Command="{x:Bind ViewModel.OpenDeviceManagerCommand}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="60"/>
                     <Button Grid.Row="3" Grid.Column="2" Content="Управление дисками" Command="{x:Bind ViewModel.OpenDiskManagementCommand}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="60" IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource InverseBoolConverter}}"/>
-                    <Button Grid.Row="3" Content="Диспетчер задач" Click="OpenTaskManager_Click" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="60"/>
+                    <Button Grid.Row="3" Content="Диспетчер задач" Command="{x:Bind ViewModel.OpenTaskManagerCommand}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Height="60"/>
                 </Grid>
             </StackPanel>
         </ScrollViewer>
 
         <!-- Статусная строка -->
         <Border Grid.Row="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                CornerRadius="6" Padding="12" Margin="0,10,0,0">
+        CornerRadius="6" Padding="12" Margin="0,10,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                       FontSize="13" VerticalAlignment="Center"/>
-                <!-- Кнопка копирования (появляется только после пинга) -->
+
+                <!-- Привязка к StatusManager -->
+                <TextBlock Text="{x:Bind ViewModel.Status.Text, Mode=OneWay}"
+                   Foreground="{x:Bind ViewModel.Status.TextColor, Mode=OneWay}"
+                   FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap"/>
+
+                <!-- Кнопка копирования -->
                 <Button Grid.Column="1"
-                    Command="{x:Bind ViewModel.CopyPingResultCommand}"
-                    Visibility="{x:Bind ViewModel.HasPingResult, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
-                    Background="Transparent" BorderThickness="0"
-                    ToolTipService.ToolTip="Копировать имя хоста">
+                Command="{x:Bind ViewModel.CopyPingResultCommand}"
+                Visibility="{x:Bind ViewModel.HasPingResult, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                Background="Transparent" BorderThickness="0" Padding="8,4"
+                ToolTipService.ToolTip="Копировать имя хоста">
                     <StackPanel Orientation="Horizontal" Spacing="4">
-                        <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
+                        <FontIcon Glyph="&#xE8C8;" FontSize="14" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
             </Grid>

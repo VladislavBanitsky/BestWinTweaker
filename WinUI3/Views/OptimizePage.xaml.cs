@@ -1,4 +1,6 @@
+using BestWinTweaker.Services;
 using BestWinTweaker.ViewModels;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -9,6 +11,8 @@ namespace BestWinTweaker.Views;
 public sealed partial class OptimizePage : Page
 {
     public OptimizeViewModel ViewModel { get; } = new();
+
+    public StatusManager Status { get; } = new();
 
     public OptimizePage()
     {
@@ -48,18 +52,21 @@ public sealed partial class OptimizePage : Page
         }
     }
 
-    private void OpenTaskManager_Click(object sender, RoutedEventArgs e)
-    {
-        System.Diagnostics.Process.Start("taskmgr.exe");
-    }
+    // Перенесены в OptimizeViewModel.cs
+    //private void OpenTaskManager_Click(object sender, RoutedEventArgs e)
+    //{
+    //    System.Diagnostics.Process.Start("taskmgr.exe");
+    //    Status.SetStatus("Открыто окно Диспетчер задач", Colors.White);
+    //}
 
-    private void OpenDeviceManager_Click(object sender, RoutedEventArgs e)
-    {
-        var psi = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "devmgmt.msc",
-            UseShellExecute = true   // ← обязательно для .msc и других документов
-        };
-        System.Diagnostics.Process.Start(psi);
-    }
+    //private void OpenDeviceManager_Click(object sender, RoutedEventArgs e)
+    //{
+    //    var psi = new System.Diagnostics.ProcessStartInfo
+    //    {
+    //        FileName = "devmgmt.msc",
+    //        UseShellExecute = true   // ← обязательно для .msc и других документов
+    //    };
+    //    System.Diagnostics.Process.Start(psi);
+    //    Status.SetStatus("Открыто окно Диспетчер устройств", Colors.White);
+    //}
 }
