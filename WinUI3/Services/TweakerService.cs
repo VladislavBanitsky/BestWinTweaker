@@ -9,6 +9,7 @@ using System.Net.NetworkInformation;
 using System.ServiceProcess;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Windows.Networking;
 
 namespace BestWinTweaker.Services;
 
@@ -113,7 +114,7 @@ public class TweakerService
     }
 
     // ---- Обои Bing ----
-    public async Task<bool> SetBingWallpaperAsync()
+    public async Task<(bool Success, string Message)> SetBingWallpaperAsync()
     {
         try
         {
@@ -125,7 +126,7 @@ public class TweakerService
             string imageUrl = doc.RootElement.GetProperty("url").GetString();
             string copyright = doc.RootElement.GetProperty("copyright").GetString();
 
-            if (string.IsNullOrEmpty(imageUrl)) return false;
+            if (string.IsNullOrEmpty(imageUrl)) return (false, "Не удалось получить URL изображения");
 
             // Скачиваем картинку
             string tempPath = Path.Combine(Path.GetTempPath(), "bing_wallpaper.jpg");
@@ -134,9 +135,11 @@ public class TweakerService
 
             // Устанавливаем как обои через Win32 API
             SystemParametersInfo(20, 0, tempPath, 3);
-            return true;
+
+            // Возвращаем успех и название (copyright)
+            return (true, copyright);
         }
-        catch { return false; }
+        catch (Exception ex) { return (false, $"Ошибка: {ex.Message}"); }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
@@ -259,7 +262,7 @@ public class TweakerService
     }
 
     // ---- Ping (нативный API вместо парсинга консоли) ----
-    public async Task<(bool Success, string Result)> PingAsync(string host)
+    public async Task<(bool Success, string HostName, string FullResult)> PingAsync(string host)
     {
         try
         {
@@ -279,7 +282,7 @@ public class TweakerService
                     // Если введено имя, получаем его IP
                     var hostEntry = Dns.GetHostEntry(host);
                     if (hostEntry.AddressList.Length > 0)
-                        hostName = $"{host} ({hostEntry.AddressList[0]})";
+                        hostName = host;  // Если ввели имя, оставляем его
                 }
             }
             catch { /* Если DNS не отвечает, оставляем как есть */ }
@@ -290,16 +293,16 @@ public class TweakerService
 
             if (reply.Status == IPStatus.Success)
             {
-                return (true, $"Узел {hostName} доступен. Время: {reply.RoundtripTime} мс");
+                return (true, hostName, $"Узел {hostName} доступен. Время: {reply.RoundtripTime} мс");
             }
             else
             {
-                return (false, $"Узел {hostName} не доступен. Статус: {reply.Status}");
+                return (false, hostName, $"Узел {hostName} не доступен. Статус: {reply.Status}");
             }
         }
         catch (Exception ex)
         {
-            return (false, $"Ошибка: {ex.Message}");
+            return (false, host, $"Ошибка: {ex.Message}");
         }
     }
 

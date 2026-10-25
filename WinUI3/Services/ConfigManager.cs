@@ -72,4 +72,32 @@ public class ConfigManager
         _config["theme"] = theme;
         SaveConfig();
     }
+
+    // --- Методы для работы с размером и расположением окна ---
+    public void SaveWindowBounds(int x, int y, int width, int height, bool isMaximized)
+    {
+        _config["WinX"] = x.ToString();
+        _config["WinY"] = y.ToString();
+        _config["WinWidth"] = width.ToString();
+        _config["WinHeight"] = height.ToString();
+        _config["WinMaximized"] = isMaximized.ToString();
+        SaveConfig();
+    }
+
+    public (int X, int Y, int Width, int Height, bool IsMaximized)? LoadWindowBounds()
+    {
+        if (_config.TryGetValue("WinWidth", out var wStr) &&
+            _config.TryGetValue("WinHeight", out var hStr) &&
+            _config.TryGetValue("WinX", out var xStr) &&
+            _config.TryGetValue("WinY", out var yStr))
+        {
+            if (int.TryParse(wStr, out int w) && int.TryParse(hStr, out int h) &&
+                int.TryParse(xStr, out int x) && int.TryParse(yStr, out int y))
+            {
+                bool isMax = _config.TryGetValue("WinMaximized", out var maxStr) && bool.TryParse(maxStr, out bool m) && m;
+                return (x, y, w, h, isMax);
+            }
+        }
+        return null; // Нет сохраненных данных
+    }
 }
