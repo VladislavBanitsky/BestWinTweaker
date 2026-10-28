@@ -59,7 +59,8 @@ class BestWinTweaker:
         # Переменные для обновления
         self.running = True
         self.update_interval = 2000
-        self._gpu_detected = False  # Добавьте эту строку
+        self._gpu_detected = False
+        self._cpu_count = psutil.cpu_count(logical=True) or 1
         
         # Флаги для потоков
         self._disk_updating = False
@@ -2504,7 +2505,7 @@ class BestWinTweaker:
         )
 
         # --- Значения ---
-        cpu = process.get('cpu_percent', 0.0)
+        cpu = process.get('cpu_percent', 0.0) / self._cpu_count
         mem_pct = process.get('memory_percent', 0.0)
         mem_mb = process.get('memory_mb', 0.0)
 
