@@ -121,10 +121,7 @@ args = [
     "--collect-all=tkinter",
     "--collect-all=PIL",
     "--collect-all=psutil",
-    "--collect-all=wmi",
-    "--collect-all=pywin32",
     "--collect-all=BlurWindow",
-
     "--uac-admin",
     "--clean",
     "--noconfirm",

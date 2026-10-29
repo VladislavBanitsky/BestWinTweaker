@@ -125,8 +125,18 @@ class SplashScreen:
         self.loading_complete = True
         
     def close(self):
-        """Закрытие заставки"""
-        self.root.destroy()
+        """Закрытие заставки с отменой всех задач"""
+        try:
+            # Отменяем все запланированные after-задачи
+            for after_id in self.root.tk.call('after', 'info'):
+                try:
+                    self.root.after_cancel(after_id)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            self.root.destroy()
         
     def run(self):
         """Запуск заставки"""
