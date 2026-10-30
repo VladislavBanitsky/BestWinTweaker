@@ -1,6 +1,7 @@
 import psutil
 import platform
 import datetime
+import queue
 import threading
 import time
 from PIL import Image as PILImage
@@ -71,6 +72,15 @@ class BestWinTweaker:
         self._disk_cache = {}
         self._ram_cache = {}
         self._copy_icon_cache = None
+        
+        # Очереди для исправления ошибки Main thread is not in main loop
+        self._uwp_queue = queue.Queue()
+        self._uwp_remove_queue = queue.Queue()
+        self._bing_queue = queue.Queue()
+        self._watermark_queue = queue.Queue()
+        self._ping_queue = queue.Queue()
+        self._ram_queue = queue.Queue()
+        self._disk_queue = queue.Queue()        
         
         self.autostart_manager = StartupManager()
         print(f"[DEBUG] StartupManager инициализирован")
@@ -417,10 +427,9 @@ class BestWinTweaker:
             try:
                 # Получаем приложения
                 apps = self.uwp_remover.get_removable_apps()
-                self.uwp_apps = apps
                 
-                # Обновляем UI в главном потоке
-                self.window.after(0, self.display_uwp_apps_fixed)
+                # Ключевой момент: не вызывайте window.after, просто поместите результат в очередь
+                self._uwp_queue.put(("success", apps))
                 
             except Exception as e:
                 error_msg = f"Ошибка: {str(e)}"
@@ -429,7 +438,28 @@ class BestWinTweaker:
         
         # Запускаем в потоке
         threading.Thread(target=load_in_thread, daemon=True).start()
+        # Запускаем проверку очереди в главном потоке
+        self._poll_uwp_queue()
+    
+    
+    def _poll_uwp_queue(self):
+        try:
+            status, data = self._uwp_queue.get_nowait()
+        except queue.Empty:
+            # Очередь пуста, проверьте снова через 100 мс
+            self.window.after(100, self._poll_uwp_queue)
+            return
 
+        # Выполняется в главном потоке, безопасное обновление интерфейса
+        if status == "success":
+            self.uwp_apps = data
+            self.display_uwp_apps_fixed()
+        else:
+            error_msg = f"Ошибка: {data}"
+            self.status_manager.set_status(error_msg, "red", priority=2, timeout=5000)
+            self.refresh_uwp_btn.configure(state="normal")
+    
+    
     def display_uwp_apps_fixed(self):
         """Отображение UWP-приложений"""
         # Очищаем контейнер
@@ -525,20 +555,34 @@ class BestWinTweaker:
         self.refresh_uwp_btn.configure(state="disabled")
         
         def remove_thread():
-            success = self.uwp_remover.remove_app(package_name)
-            
-            def update_ui():
-                if success:
-                    self.status_manager.set_status(f"✓ {app_name} удалено", "green", priority=1, timeout=3000)
-                    # Обновляем список
-                    self.load_uwp_apps()
-                else:
-                    self.status_manager.set_status(f"✗ Ошибка при удалении {app_name}", "red", priority=2, timeout=5000)
-                    self.refresh_uwp_btn.configure(state="normal")
-            
-            self.window.after(0, update_ui)
-        
+            try:
+                success = self.uwp_remover.remove_app(package_name)
+                self._uwp_remove_queue.put(("done", success, app_name))  # кладём в очередь
+            except Exception as e:
+                self._uwp_remove_queue.put(("error", str(e), app_name))
+                
         threading.Thread(target=remove_thread, daemon=True).start()
+        self._poll_uwp_remove_queue()  # опрашиваем очередь
+    
+    def _poll_uwp_remove_queue(self):
+        """Опрос очереди удаления UWP-приложений в главном потоке."""
+        try:
+            status, result, app_name = self._uwp_remove_queue.get_nowait()
+        except queue.Empty:
+            # Очередь пуста — проверим снова через 100 мс
+            self.window.after(100, self._poll_uwp_remove_queue)
+            return
+
+        if status == "done":
+            if result:
+                self.status_manager.set_status(f"✓ {app_name} удалено", "green", priority=1, timeout=3000)
+                self.load_uwp_apps()
+            else:
+                self.status_manager.set_status(f"✗ Ошибка при удалении {app_name}", "red", priority=2, timeout=5000)
+                self.refresh_uwp_btn.configure(state="normal")
+        else:  # "error"
+            self.status_manager.set_status(f"✗ Ошибка: {result}", "red", priority=2, timeout=5000)
+            self.refresh_uwp_btn.configure(state="normal")
     
     def setup_monitor_tab(self):
         """Настройка вкладки мониторинга"""
@@ -558,7 +602,6 @@ class BestWinTweaker:
         self.create_network_section(right_column)
         self.create_disk_section(right_column)
 
-    # В методе setup_optimize_tab замените создание кнопок на следующий код:
 
     def setup_optimize_tab(self):
         """Настройка вкладки оптимизации"""
@@ -668,7 +711,7 @@ class BestWinTweaker:
             0, 2
         )
         
-        create_tool_button(
+        self.remove_watermark_btn = create_tool_button(
             buttons_grid,
             "Удалить водяной знак сборки",
             self.action_remove_watermark,
@@ -720,27 +763,44 @@ class BestWinTweaker:
         # Блокируем кнопку, чтобы не было множественных нажатий
         self.bing_btn.configure(state="disabled")
         self.status_manager.set_status("Загрузка и установка обоев Bing...", "orange", priority=1)
-        self.window.update()
+        # self.window.update()
 
         def set_wallpaper_thread():
-            # Можно добавить выбор разрешения, но для простоты оставим UHD
-            success, message = TweakerTools.set_bing_wallpaper(
-                resolution="UHD", 
-                mkt="ru-RU", 
-                index=0
-            )
-            
-            def update_ui():
-                self.bing_btn.configure(state="normal")
-                if success:
-                    self.status_manager.set_status(message, "green", priority=1, timeout=5000)
-                else:
-                    self.status_manager.set_status(message, "red", priority=2, timeout=5000)
-            
-            self.window.after(0, update_ui)
+            try:
+                # Можно добавить выбор разрешения, но для простоты оставим UHD
+                success, message = TweakerTools.set_bing_wallpaper(
+                    resolution="UHD", 
+                    mkt="ru-RU", 
+                    index=0
+                )
+                
+                self._bing_queue.put(("done", success, message))  # кладём результат в очередь
+            except Exception as e:
+                self._bing_queue.put(("error", False, f"Ошибка: {e}"))
 
         # Запускаем в отдельном потоке, чтобы не блокировать интерфейс
         threading.Thread(target=set_wallpaper_thread, daemon=True).start()
+        self._poll_bing_queue()  # опрос очереди
+    
+    
+    def _poll_bing_queue(self):
+        """Опрос очереди установки обоев Bing в главном потоке."""
+        try:
+            status, success, message = self._bing_queue.get_nowait()
+        except queue.Empty:
+            # Очередь пуста — проверим снова через 100 мс
+            self.window.after(100, self._poll_bing_queue)
+            return
+
+        # Выполняется в главном потоке — безопасное обновление интерфейса
+        self.bing_btn.configure(state="normal")
+
+        if status == "done" and success:
+            self.status_manager.set_status(message, "green", priority=1, timeout=5000)
+        elif status == "done":
+            self.status_manager.set_status(message, "red", priority=2, timeout=5000)
+        else:  # "error"
+            self.status_manager.set_status(message, "red", priority=2, timeout=5000)
     
     
     def action_ping(self):
@@ -834,27 +894,27 @@ class BestWinTweaker:
         if not ip or ip.strip() == "":
             result_label.configure(text="Введите IP-адрес или домен!", text_color="red")
             return
-        
-        # Блокируем кнопку
+
+        # Блокируем кнопку и обновляем статус (в главном потоке)
         ping_button.configure(state="disabled", text="Проверка...")
         result_label.configure(text="Проверка доступности...", text_color="orange")
-        
-        # Очищаем вывод
+
+        # Очищаем вывод (в главном потоке)
         output_text.configure(state="normal")
         output_text.delete("1.0", "end")
         output_text.configure(state="disabled")
-        
+
         def ping_thread():
             import subprocess
             import re
             import socket
-            
+
             target = ip.strip()
             result_lines = []
             hostname = None
             is_reachable = False
             response_time = None
-            
+
             try:
                 # Попытка получить имя хоста
                 try:
@@ -862,9 +922,9 @@ class BestWinTweaker:
                 except socket.herror:
                     try:
                         hostname = socket.gethostbyname(target)
-                    except:
+                    except Exception:
                         hostname = None
-                
+
                 # Выполняем пинг
                 cmd = f'ping -n 4 {target}'
                 result = subprocess.run(
@@ -875,22 +935,19 @@ class BestWinTweaker:
                     encoding='cp866',
                     timeout=10
                 )
-                
+
                 output = result.stdout
                 result_lines.append("=== РЕЗУЛЬТАТ ПИНГА ===")
                 result_lines.append("")
-                
-                # Разбираем вывод
+
                 for line in output.split('\n'):
                     if line.strip():
                         result_lines.append(line)
-                        # Ищем время ответа
                         time_match = re.search(r'время[=<](\d+)[мс]', line)
                         if time_match:
                             response_time = time_match.group(1)
                             is_reachable = True
-                
-                # Если пинг прошел, добавляем информацию об узле
+
                 if is_reachable:
                     result_lines.insert(1, f"Узел: {hostname if hostname else target}")
                     result_lines.insert(2, f"Статус: ДОСТУПЕН")
@@ -900,32 +957,49 @@ class BestWinTweaker:
                     result_lines.insert(1, f"Узел: {hostname if hostname else target}")
                     result_lines.insert(2, f"Статус: НЕ ДОСТУПЕН")
                     result_lines.insert(3, "")
-                
+
             except subprocess.TimeoutExpired:
                 result_lines.append("Превышено время ожидания ответа")
             except Exception as e:
                 result_lines.append(f"Ошибка: {str(e)}")
-            
-            # Обновляем UI в главном потоке
-            def update_ui():
-                output_text.configure(state="normal")
-                output_text.delete("1.0", "end")
-                output_text.insert("1.0", "\n".join(result_lines))
-                output_text.configure(state="disabled")
-                
-                # Обновляем статус
-                if is_reachable:
-                    host_info = f"Узел {hostname if hostname else target} доступен (время ответа: ~{response_time} мс)"
-                    result_label.configure(text=host_info, text_color="green")
-                else:
-                    host_info = f"Узел {hostname if hostname else target} не доступен"
-                    result_label.configure(text=host_info, text_color="red")
-                
-                ping_button.configure(state="normal", text="Проверить пинг")
-            
-            self.window.after(0, update_ui)
-        
+
+            # Фоновый поток только кладёт результат в очередь
+            self._ping_queue.put((
+                result_lines,
+                is_reachable,
+                response_time,
+                hostname if hostname else target,
+            ))
+
         threading.Thread(target=ping_thread, daemon=True).start()
+
+        # Опрос очереди запускается в главном потоке (потокобезопасно)
+        self._poll_ping_queue(ping_button, output_text, result_label)
+
+
+    def _poll_ping_queue(self, ping_button, output_text, result_label):
+        """Опрос очереди пинга в главном потоке."""
+        try:
+            result_lines, is_reachable, response_time, host = self._ping_queue.get_nowait()
+        except queue.Empty:
+            # Очередь пуста — проверим снова через 100 мс
+            self.window.after(100, lambda: self._poll_ping_queue(ping_button, output_text, result_label))
+            return
+
+        # Выполняется в главном потоке — безопасное обновление интерфейса
+        output_text.configure(state="normal")
+        output_text.delete("1.0", "end")
+        output_text.insert("1.0", "\n".join(result_lines))
+        output_text.configure(state="disabled")
+
+        if is_reachable:
+            host_info = f"Узел {host} доступен (время ответа: ~{response_time} мс)"
+            result_label.configure(text=host_info, text_color="green")
+        else:
+            host_info = f"Узел {host} не доступен"
+            result_label.configure(text=host_info, text_color="red")
+
+        ping_button.configure(state="normal", text="Проверить пинг")
     
     def setup_about_tab(self):
         """Настройка вкладки О программе"""
@@ -1436,37 +1510,50 @@ class BestWinTweaker:
         
         self.status_manager.set_status("Удаление водяного знака сборки...", "orange", priority=1)
         self.remove_watermark_btn.configure(state="disabled")
-        self.window.update()
         
         def remove_thread():
-            success, error = TweakerTools.remove_watermark()
-            
-            def update_ui():
-                self.remove_watermark_btn.configure(state="normal")
-                if success:
-                    self.status_manager.set_status(
-                        "✓ Водяной знак удален! Проводник перезапущен.", 
-                        "green", 
-                        priority=1, 
-                        timeout=3000
-                    )
-                else:
-                    self.status_manager.set_status(
-                        f"✗ Ошибка: {error if error else 'Неизвестная ошибка'}", 
-                        "red", 
-                        priority=2, 
-                        timeout=5000
-                    )
-                    messagebox.showerror(
-                        "Ошибка",
-                        f"Не удалось удалить водяной знак:\n{error if error else 'Неизвестная ошибка'}\n\n"
-                        "Попробуйте запустить программу от имени администратора."
-                    )
-            
-            self.window.after(0, update_ui)
+            try:
+                success, error = TweakerTools.remove_watermark()
+                self._watermark_queue.put(("done", success, error))  # кладём в очередь
+            except Exception as e:
+                self._watermark_queue.put(("error", False, str(e))) 
         
         threading.Thread(target=remove_thread, daemon=True).start()
+        self._poll_watermark_queue()  # опрашиваем очередь
+    
+    def _poll_watermark_queue(self):
+        """Опрос очереди удаления водяного знака в главном потоке."""
+        try:
+            status, success, error = self._watermark_queue.get_nowait()
+        except queue.Empty:
+            # Очередь пуста — проверим снова через 100 мс
+            self.window.after(100, self._poll_watermark_queue)
+            return
 
+        # Выполняется в главном потоке — безопасное обновление интерфейса
+        self.remove_watermark_btn.configure(state="normal")
+
+        if status == "done" and success:
+            self.status_manager.set_status(
+                "✓ Водяной знак удален! Проводник перезапущен.",
+                "green",
+                priority=1,
+                timeout=3000
+            )
+        else:
+            error_text = error if error else "Неизвестная ошибка"
+            self.status_manager.set_status(
+                f"✗ Ошибка: {error_text}",
+                "red",
+                priority=2,
+                timeout=5000
+            )
+            messagebox.showerror(
+                "Ошибка",
+                f"Не удалось удалить водяной знак:\n{error_text}\n\n"
+                "Попробуйте запустить программу от имени администратора."
+            )
+    
     def create_header(self):
         header = ctk.CTkFrame(self.main_container, height=40)
         header.pack(fill="x", padx=10, pady=(10, 5))
@@ -1750,46 +1837,44 @@ class BestWinTweaker:
         self.status_label.pack(side="left", padx=20)
         self.status_manager = StatusManager(self.status_label)
 
-    def update_stats(self):
-        while self.running:
-            try:
-                self.window.after(0, self.update_cpu_info)
-                self.window.after(0, self.update_network_info)
-                self.window.after(0, self.update_gpu_info)
-                self.window.after(0, self.update_time_info)
-                
-                # Запускаем обновление RAM и дисков в отдельных потоках
-                self.update_ram_async()
-                self.update_disk_async()
-
-                time.sleep(self.update_interval / 1000)
-            except Exception as e:
-                print(f"Error in update thread: {e}")
-                time.sleep(1)
-
     def update_ram_async(self):
-        """Асинхронное обновление информации об ОЗУ"""
+        """Асинхронное обновление ОЗУ: поток собирает данные, главный поток обновляет UI."""
         if self._ram_updating:
             return
-        
         self._ram_updating = True
-        
+
         def _update_ram_in_thread():
             try:
                 ram = psutil.virtual_memory()
-                self._ram_cache = {
+                data = {
                     'percent': ram.percent,
                     'used_gb': ram.used / (1024 ** 3),
-                    'total_gb': ram.total / (1024 ** 3)
+                    'total_gb': ram.total / (1024 ** 3),
                 }
-                # Обновляем UI в главном потоке
-                self._safe_after(0, self._update_ram_ui)
+                # Фоновый поток только кладёт результат в очередь
+                self._ram_queue.put(data)
             except Exception as e:
                 print(f"RAM update error in thread: {e}")
             finally:
                 self._ram_updating = False
-        
+
         threading.Thread(target=_update_ram_in_thread, daemon=True).start()
+        # Опрос очереди — в главном потоке
+        self._poll_ram_queue()
+
+
+    def _poll_ram_queue(self):
+        """Опрос очереди RAM в главном потоке."""
+        if not self.running:
+            return
+        try:
+            data = self._ram_queue.get_nowait()
+        except queue.Empty:
+            self.window.after(50, self._poll_ram_queue)
+            return
+        self._ram_cache = data
+        self._update_ram_ui()
+    
     
     def _update_ram_ui(self):
         """Обновление UI с информацией об ОЗУ"""
@@ -1802,43 +1887,53 @@ class BestWinTweaker:
                 )
         except Exception as e:
             print(f"RAM UI update error: {e}")
-
+            
+    
     def update_disk_async(self):
-        """Асинхронное обновление информации о дисках"""
+        """Асинхронное обновление дисков: поток собирает данные, главный поток обновляет UI."""
         if self._disk_updating:
             return
-        
         self._disk_updating = True
-        
+
         def _update_disk_in_thread():
             try:
                 current_disks = {}
                 for partition in psutil.disk_partitions():
                     try:
-                        # Пропускаем CD/DVD приводы
                         if partition.opts and 'cdrom' in partition.opts.lower():
                             continue
-                            
                         usage = psutil.disk_usage(partition.mountpoint)
                         current_disks[partition.device] = {
                             'mount': partition.mountpoint,
                             'percent': usage.percent,
                             'used': usage.used,
                             'total': usage.total,
-                            'type': get_disk_type(partition.device)
+                            'type': get_disk_type(partition.device),
                         }
-                    except:
+                    except Exception:
                         pass
-                self._disk_cache = current_disks
-                # Обновляем UI в главном потоке
-                if self.running:
-                    self._safe_after(0, self._update_disk_ui)
+                self._disk_queue.put(current_disks)
             except Exception as e:
                 print(f"Disk update error in thread: {e}")
             finally:
                 self._disk_updating = False
-        
+
         threading.Thread(target=_update_disk_in_thread, daemon=True).start()
+        self._poll_disk_queue()
+
+
+    def _poll_disk_queue(self):
+        """Опрос очереди дисков в главном потоке."""
+        if not self.running:
+            return
+        try:
+            data = self._disk_queue.get_nowait()
+        except queue.Empty:
+            self.window.after(50, self._poll_disk_queue)
+            return
+        self._disk_cache = data
+        self._update_disk_ui()
+    
     
     def _update_disk_ui(self):
         """Обновление UI с информацией о дисках"""
@@ -3019,11 +3114,30 @@ class BestWinTweaker:
             self.status_manager.hide_hover()
     
     def start_updates(self):
-        """Запуск всех потоков обновления"""
-        self.update_thread = threading.Thread(target=self.update_stats, daemon=True)
-        self.update_thread.start()
-        # Добавляем переменные для отслеживания потоков
+        """Запуск периодических обновлений в главном потоке (безопасно для Tkinter)."""
         self._gpu_updating = False
+        # Первый запуск — сразу, дальше цикл через after
+        self.window.after(0, self._update_stats_tick)
+
+    def _update_stats_tick(self):
+        """Один тик обновления статистики. Выполняется в главном потоке."""
+        if not self.running:
+            return
+
+        try:
+            self.update_cpu_info()
+            self.update_network_info()
+            self.update_gpu_info()
+            self.update_time_info()
+
+            self.update_ram_async()
+            self.update_disk_async()
+        except Exception as e:
+            print(f"Error in update tick: {e}")
+
+        # Планируем следующий тик
+        if self.running:
+            self.window.after(self.update_interval, self._update_stats_tick)
 
     def run(self):
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
