@@ -50,7 +50,10 @@ class StartupManager:
         self._cache = {}
         self._backup_file = self._get_backup_file_path()
         print(f"[БЭКАП] Файл бэкапа: {self._backup_file}")
-        self.cleanup_backup()
+        try:
+            self.cleanup_backup()
+        except Exception as e:
+            print(f"[БЭКАП] Ошибка очистки бэкапа (пропущено): {e}")
     
     def cleanup_backup(self):
         """Очищает бэкап от дублирующихся записей"""
@@ -100,6 +103,7 @@ class StartupManager:
         return backup_dir / 'startup_backup.json'
     
     def _load_backup(self) -> Dict:
+        """Загружает бэкап из файла, приводя любой формат к словарю."""
         backup_min = {
             "SecurityHealth_HKCU\\Run": {
                 "name": "SecurityHealth",
@@ -111,18 +115,45 @@ class StartupManager:
                 "updated_at": "2026-07-11T14:59:54.605723"
             }
         }
-        
-        """Загружает бэкап из файла"""
+
         if not self._backup_file.exists():
             return backup_min
-        
+
         try:
             with open(self._backup_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                return self.list_to_dict(data)  # проверка и преобразование к типу Словарь при необходимости
         except Exception as e:
             print(f"Ошибка загрузки бэкапа: {e}")
             return backup_min
     
+    
+    def list_to_dict(self, data):
+        # Нормализация: если это список — преобразуем в словарь
+        if isinstance(data, list):
+            print("[БЭКАП] Обнаружен формат список — преобразуем в словарь")
+            normalized = {}
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get('name', '')
+                source = item.get('source', 'Unknown')
+                if not name:
+                    continue
+                entry_key = f"{name}_{source}"
+                normalized[entry_key] = item
+            # Сохраняем нормализованный формат обратно
+            try:
+                self._save_backup(normalized)
+            except Exception as e:
+                print(f"[БЭКАП] Не удалось пересохранить нормализованный бэкап: {e}")
+            return normalized
+
+        # Если это уже словарь — возвращаем как есть
+        if isinstance(data, dict):
+            return data
+        
+        
     def _save_backup(self, backup_data: Dict):
         """Сохраняет бэкап в файл"""
         try:
