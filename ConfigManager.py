@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 
+
 class ConfigManager:
     """Класс для управления настройками приложения"""
     
@@ -24,6 +25,43 @@ class ConfigManager:
         """Сохранить тему"""
         config = self._load_config()
         config['theme'] = theme
+        self._save_config(config)
+    
+    def get_window_geometry(self):
+        """Возвращает сохранённую геометрию окна в логических пикселях.
+        
+        Returns:
+            dict | None: {'x': int, 'y': int, 'width': int, 'height': int, 'maximized': bool}
+                         или None, если сохранённой геометрии нет.
+        """
+        config = self._load_config()
+
+        # Проверяем наличие всех ключей
+        required = ('WinWidth', 'WinHeight')
+        if not all(k in config for k in required):
+            return None
+
+        try:
+            return {
+                'x': int(config.get('WinX', 100)),
+                'y': int(config.get('WinY', 100)),
+                'width': int(config['WinWidth']),
+                'height': int(config['WinHeight']),
+                'maximized': str(config.get('WinMaximized', 'False')).lower() == 'true',
+            }
+        except (ValueError, TypeError):
+            return None
+
+    def set_window_geometry(self, x, y, width, height, maximized=False):
+        """Сохраняет геометрию окна в логических пикселях."""
+        config = self._load_config()
+        config.update({
+            'WinX': str(int(x)),
+            'WinY': str(int(y)),
+            'WinWidth': str(int(width)),
+            'WinHeight': str(int(height)),
+            'WinMaximized': 'True' if maximized else 'False',
+        })
         self._save_config(config)
     
     def _load_config(self):

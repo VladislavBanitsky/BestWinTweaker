@@ -21,7 +21,7 @@ import patch_subprocess  # <-- ПЕРВЫМ ИМПОРТОМ
 # Импортируем GPUtil после патча
 import GPUtil
 
-from utilities import blur_window, center_window, no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, start_download, get_windows_version
+from utilities import blur_window, center_window, no_show_gpu, get_disk_type, get_ddr_info, get_ddr_type, get_board_model, resource_path, callback, start_download, get_windows_version, tk_get_scaling, physical_to_logical, logical_to_physical
 from uwpremover import *
 from TweakerTools import TweakerTools
 from StartupManager import StartupManager
@@ -56,6 +56,9 @@ class BestWinTweaker:
         saved_theme = self.config_manager.get_theme()
         ctk.set_appearance_mode(saved_theme)
         
+        # Восстанавливаем геометрию окна
+        self._restore_window_geometry()
+        
         # Переменные для обновления
         self.running = True
         self.update_interval = 2000
@@ -86,7 +89,106 @@ class BestWinTweaker:
         self.setup_ui()
         self.apply_preloaded_data()  # Применяем предзагруженные данные
         self.start_updates()
+    
+    def _restore_window_geometry(self):
+        """Восстанавливает позицию/размер окна из конфига (в логических пикселях).
 
+        Если сохранённой геометрии нет — окно центрируется с дефолтным размером.
+        Корректно работает при любом DPI-масштабе ОС.
+        """
+        default_w, default_h = 1400, 690
+
+        # Нужно, чтобы окно уже существовало и Tk знал его DPI-scaling
+        self.window.update_idletasks()
+        scaling = tk_get_scaling(self.window)
+
+        geometry = self.config_manager.get_window_geometry()
+
+        if not geometry:
+            # Первый запуск — центрируем с дефолтным размером (функция center_window
+            # принимает физические пиксели Tk — это нормально, т.к. она использует
+            # winfo_screenwidth/height, которые тоже физические)
+            center_window(self.window, default_w, default_h)
+            return
+
+        # Логические пиксели → физические пиксели Tk
+        x = logical_to_physical(geometry['x'], scaling)
+        y = logical_to_physical(geometry['y'], scaling)
+        w = logical_to_physical(geometry['width'], scaling)
+        h = logical_to_physical(geometry['height'], scaling)
+
+        # Защита от «уехавшего» окна: если сохранённая позиция вне экрана — центрируем
+        screen_w = self.window.winfo_screenwidth()
+        screen_h = self.window.winfo_screenheight()
+        if not (-screen_w < x < screen_w * 2 and -screen_h < y < screen_h * 2):
+            center_window(self.window, default_w, default_h)
+            return
+
+        # Минимальные размеры, чтобы окно не «схлопнулось»
+        w = max(w, 800)
+        h = max(h, 500)
+
+        self.window.geometry(f"{w}x{h}+{x}+{y}")
+
+        # Восстановление максимизации — отложенно, после появления окна
+        if geometry['maximized']:
+            self.window.after(50, lambda: self.window.state('zoomed'))
+        
+        # Отслеживаем «нормальную» геометрию, чтобы корректно сохранять её
+        # после разворачивания/сворачивания
+        self._last_normal_geometry = None
+        self.window.bind('<Configure>', self._on_window_configure, add='+')
+    
+    def _on_window_configure(self, event):
+        """Запоминает геометрию окна в нормальном (не maximized) состоянии."""
+        if event.widget is not self.window:
+            return
+        try:
+            if self.window.state() == 'normal':
+                geom = self.window.geometry()
+                size, pos = geom.split('+', 1) if '+' in geom else (geom, '0+0')
+                w, h = map(int, size.split('x'))
+                x, y = map(int, pos.split('+'))
+                self._last_normal_geometry = (x, y, w, h)
+        except Exception:
+            pass
+    
+    def _save_window_geometry(self):
+        """Сохраняет позицию/размер окна в логических пикселях (DPI-независимо)."""
+        # update_idletasks гарантирует, что winfo_* вернут актуальные значения
+        self.window.update_idletasks()
+
+        scaling = tk_get_scaling(self.window)
+        is_maximized = self.window.state() == 'zoomed'
+
+        if is_maximized:
+            # В maximized состоянии winfo_width/height возвращают размер экрана.
+            # Чтобы не «запомнить» развёрнутое окно как нормальный размер,
+            # используем последнюю нормализованную геометрию.
+            # Tk хранит её в атрибуте окна — можно получить через wm_geometry()
+            # после временного снятия maximized, но проще запомнить при первом
+            # нормальном состоянии (см. _last_normal_geometry ниже).
+            x, y, w, h = getattr(self, '_last_normal_geometry', (100, 100, 1400, 690))
+        else:
+            # geometry() возвращает "WxH+X+Y" в физических пикселях Tk
+            geom = self.window.geometry()  # например "1400x690+260+195"
+            size, pos = geom.split('+', 1) if '+' in geom else (geom, '0+0')
+            w, h = map(int, size.split('x'))
+            x, y = map(int, pos.split('+'))
+            # Кешируем нормализованную геометрию — пригодится, если пользователь
+            # развернёт окно и закроет его
+            self._last_normal_geometry = (x, y, w, h)
+
+        # Физические → логические
+        logical_x = physical_to_logical(x, scaling)
+        logical_y = physical_to_logical(y, scaling)
+        logical_w = physical_to_logical(w, scaling)
+        logical_h = physical_to_logical(h, scaling)
+
+        self.config_manager.set_window_geometry(
+            logical_x, logical_y, logical_w, logical_h, maximized=is_maximized
+        )
+    
     def _load_copy_icon(self):
         """Загружает иконку копирования с поддержкой тёмной/светлой темы"""
         if hasattr(self, '_copy_icon_cache') and self._copy_icon_cache is not None:
@@ -2928,6 +3030,12 @@ class BestWinTweaker:
         self.window.mainloop()
 
     def on_closing(self):
+         # Сохраняем геометрию ДО уничтожения окна
+        try:
+            self._save_window_geometry()
+        except Exception as e:
+            print(f"Не удалось сохранить геометрию окна: {e}")
+        
         self.running = False
         self.stop_processes_auto_refresh()
         # Отменяем все запланированные after-задачи

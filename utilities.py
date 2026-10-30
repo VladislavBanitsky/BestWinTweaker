@@ -35,6 +35,26 @@ def center_window(window, width, height):
     # Устанавливаем положение окна
     window.geometry(f'{width}x{height}+{x}+{y}')
 
+def tk_get_scaling(window):
+    """Возвращает коэффициент масштабирования Tk для данного окна.
+    
+    На Windows при 100% DPI ≈ 1.333, при 125% ≈ 1.666, при 150% ≈ 2.0.
+    """
+    try:
+        return float(window.tk.call('tk', 'scaling'))
+    except Exception:
+        return 1.333  # безопасный дефолт
+
+
+def physical_to_logical(value, scaling):
+    """Физические пиксели Tk → логические пиксели ОС."""
+    return int(round(value / scaling))
+
+
+def logical_to_physical(value, scaling):
+    """Логические пиксели ОС → физические пиксели Tk."""
+    return int(round(value * scaling))
+
 # Функция для проверки типа диска
 def get_disk_type(drive_letter='C:'):
     """Определение типа диска в Windows (работает в потоках)"""
