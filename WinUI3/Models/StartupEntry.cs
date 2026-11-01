@@ -17,9 +17,6 @@ public partial class StartupEntry : ObservableObject
     [ObservableProperty]
     private bool _enabled;
 
-    [ObservableProperty]
-    private bool _isFromBackup;              // запись есть в бэкапе, но отсутствует в системе
-
     public string Type => Source switch
     {
         "Startup Folder" => "папка",
