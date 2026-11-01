@@ -17,10 +17,10 @@
 	  <PublishTrimmed>false</PublishTrimmed>
 	  <PublishReadyToRun>false</PublishReadyToRun>
 	  <SelfContained>true</SelfContained>
-	  <Version>1.9.29</Version>
+	  <Version>1.9.32</Version>
 	  <AssemblyName>BestWinTweaker</AssemblyName>
-	  <AssemblyVersion>1.9.29.0</AssemblyVersion>
-	  <FileVersion>1.9.29.0</FileVersion>
+	  <AssemblyVersion>1.9.32.0</AssemblyVersion>
+	  <FileVersion>1.9.32.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <None Remove="Views\AboutPage.xaml" />

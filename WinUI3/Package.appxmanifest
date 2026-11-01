@@ -11,7 +11,7 @@
   <Identity
     Name="c800e336-7c83-4234-8800-0a3513b3106c"
     Publisher="CN=VladislavBanitsky"
-    Version="1.9.29.0" />
+    Version="1.9.32.0" />
 
   <mp:PhoneIdentity PhoneProductId="c800e336-7c83-4234-8800-0a3513b3106c" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
