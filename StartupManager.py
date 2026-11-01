@@ -1,33 +1,23 @@
-import os
-import sys
-import ctypes
 import winreg
+import os
+import ctypes
 import subprocess
-import json  # <-- ДОБАВЬТЕ ЭТУ СТРОКУ
-from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+import csv
+import io
 from dataclasses import dataclass
-from datetime import datetime  # <-- И ЭТУ СТРОКУ
+from typing import List, Optional, Tuple
 
-# Константы для работы с реестром
 HKEY_CURRENT_USER = winreg.HKEY_CURRENT_USER
 HKEY_LOCAL_MACHINE = winreg.HKEY_LOCAL_MACHINE
 
-# Пути автозагрузки в реестре
 REG_PATH_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
-REG_PATH_RUN_ONCE = r"Software\Microsoft\Windows\CurrentVersion\RunOnce"
 REG_PATH_RUN_32 = r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"
 
-# Константы для уведомления системы об изменениях
-SHCNE_ASSOCCHANGED = 0x08000000
-SHCNF_IDLIST = 0x0000
-HWND_BROADCAST = 0xFFFF
-WM_SETTINGCHANGE = 0x001A
-
+REG_PATH_APPROVED = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+REG_PATH_APPROVED_32 = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32"
 
 @dataclass
 class StartupEntry:
-    """Класс для хранения информации о записи автозагрузки"""
     name: str
     path: str
     source: str  # 'HKCU\Run', 'HKLM\Run', 'HKLM\Run (32-bit)', 'Startup Folder'
@@ -37,985 +27,353 @@ class StartupEntry:
         status = "✅ Включено" if self.enabled else "❌ Отключено"
         return f"{self.name} ({self.source}) - {status}"
 
-
 class StartupManager:
-    """
-    Класс для управления автозагрузкой приложений в Windows.
-    Поддерживает работу с реестром и папкой автозагрузки.
-    """
-    
     def __init__(self):
-        """Инициализация менеджера автозагрузки"""
         self._startup_folder = self._get_startup_folder_path()
-        self._cache = {}
-        self._backup_file = self._get_backup_file_path()
-        print(f"[БЭКАП] Файл бэкапа: {self._backup_file}")
-        try:
-            self.cleanup_backup()
-        except Exception as e:
-            print(f"[БЭКАП] Ошибка очистки бэкапа (пропущено): {e}")
-    
-    def cleanup_backup(self):
-        """Очищает бэкап от дублирующихся записей"""
-        backup = self._load_backup()
-        
-        if not backup:
-            return
-        
-        # Словарь для хранения последней версии каждой записи
-        latest_entries = {}
-        
-        for key, data in backup.items():
-            if 'name' not in data:
-                continue
-            
-            name = data.get('name', '')
-            source = data.get('source', 'Unknown')
-            dedup_key = f"{name}_{source}"
-            
-            # Если запись уже есть, выбираем самую свежую
-            if dedup_key in latest_entries:
-                existing = latest_entries[dedup_key]
-                existing_date = existing.get('updated_at', '')
-                new_date = data.get('updated_at', '')
-                
-                # Если новая запись свежее - заменяем
-                if new_date > existing_date:
-                    latest_entries[dedup_key] = data
-            else:
-                latest_entries[dedup_key] = data
-        
-        # Перестраиваем бэкап только с уникальными записями
-        cleaned_backup = {}
-        for key, data in latest_entries.items():
-            # Восстанавливаем оригинальный ключ для обратной совместимости
-            original_key = data['name'] + "_" + data['source'].replace('\\', '_')
-            cleaned_backup[original_key] = data
-        
-        self._save_backup(cleaned_backup)
-        print(f"[БЭКАП] Очистка завершена. Осталось {len(cleaned_backup)} уникальных записей")
-    
-    def _get_backup_file_path(self) -> Path:
-        """Получает путь к файлу бэкапа автозагрузки"""
-        # Создаем папку .bwt в домашней директории пользователя
-        backup_dir = Path(os.environ.get('USERPROFILE', '')) / '.bwt' / 'backups'
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        return backup_dir / 'startup_backup.json'
-    
-    def _load_backup(self) -> Dict:
-        """Загружает бэкап из файла, приводя любой формат к словарю."""
-        backup_min = {
-            "SecurityHealth_HKCU\\Run": {
-                "name": "SecurityHealth",
-                "path": "C:\\WINDOWS\\system32\\SecurityHealthSystray.exe",
-                "source": "HKCU\\Run",
-                "enabled": True,
-                "first_seen": "2026-07-11T14:59:54.605723",
-                "last_seen": "2026-07-11T14:59:54.605723",
-                "updated_at": "2026-07-11T14:59:54.605723"
-            }
-        }
 
-        if not self._backup_file.exists():
-            return backup_min
+    def _get_startup_folder_path(self) -> str:
+        appdata = os.environ.get('APPDATA', '')
+        if appdata:
+            return os.path.join(appdata, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+        return ""
 
+    def _get_approved_key(self, hive: int, is_32bit: bool, writable: bool = False) -> Optional[int]:
+        """Открывает ключ StartupApproved."""
+        path = REG_PATH_APPROVED_32 if is_32bit else REG_PATH_APPROVED
+        access = winreg.KEY_READ | (winreg.KEY_SET_VALUE if writable else 0)
         try:
-            with open(self._backup_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return self.list_to_dict(data)  # проверка и преобразование к типу Словарь при необходимости
-        except Exception as e:
-            print(f"Ошибка загрузки бэкапа: {e}")
-            return backup_min
-    
-    
-    def list_to_dict(self, data):
-        # Нормализация: если это список — преобразуем в словарь
-        if isinstance(data, list):
-            print("[БЭКАП] Обнаружен формат список — преобразуем в словарь")
-            normalized = {}
-            for item in data:
-                if not isinstance(item, dict):
-                    continue
-                name = item.get('name', '')
-                source = item.get('source', 'Unknown')
-                if not name:
-                    continue
-                entry_key = f"{name}_{source}"
-                normalized[entry_key] = item
-            # Сохраняем нормализованный формат обратно
-            try:
-                self._save_backup(normalized)
-            except Exception as e:
-                print(f"[БЭКАП] Не удалось пересохранить нормализованный бэкап: {e}")
-            return normalized
-
-        # Если это уже словарь — возвращаем как есть
-        if isinstance(data, dict):
-            return data
-        
-        
-    def _save_backup(self, backup_data: Dict):
-        """Сохраняет бэкап в файл"""
-        try:
-            # Сортируем для удобства чтения
-            sorted_backup = dict(sorted(backup_data.items()))
-            with open(self._backup_file, 'w', encoding='utf-8') as f:
-                json.dump(sorted_backup, f, ensure_ascii=False, indent=2)
-            return True
-        except Exception as e:
-            print(f"Ошибка сохранения бэкапа: {e}")
-            return False
-    
-    def _backup_registry_entry(self, name: str, path: str, source: str, enabled: bool):
-        """Сохраняет запись в бэкап с дополнением (обновляет существующую)"""
-        print(f"[БЭКАП] Сохранение записи: {name} ({source}) - {'ВКЛ' if enabled else 'ОТКЛ'}")
-        
-        # Раскрываем переменные окружения для сохранения
-        expanded_path = os.path.expandvars(path.strip().strip('"'))
-        print(f"[БЭКАП] Сохраняем путь: {expanded_path}")
-        
-        backup = self._load_backup()
-        
-        # Создаем уникальный ключ для записи (используем name + source без преобразования)
-        # Важно: используем одинаковый ключ для одной и той же программы
-        entry_key = f"{name}_{source}"  # Просто конкатенация, без замены \
-        
-        print(f"[БЭКАП] Ключ записи: {entry_key}")
-        
-        # Проверяем, существует ли уже такая запись
-        if entry_key in backup:
-            # Если запись уже есть, обновляем
-            old_enabled = backup[entry_key].get('enabled', False)
-            old_path = backup[entry_key].get('path', '')
-            
-            # Обновляем только если изменилось состояние или путь
-            if old_path != expanded_path or old_enabled != enabled:
-                backup[entry_key].update({
-                    'path': expanded_path,
-                    'enabled': enabled,
-                    'last_seen': datetime.now().isoformat(),
-                    'updated_at': datetime.now().isoformat()
-                })
-                # Если запись была удалена и теперь включена - убираем deleted_at
-                if enabled and 'deleted_at' in backup[entry_key]:
-                    del backup[entry_key]['deleted_at']
-                print(f"[БЭКАП] Обновлена запись: {name}")
-            else:
-                print(f"[БЭКАП] Запись не изменилась: {name}")
-        else:
-            # Новая запись
-            backup[entry_key] = {
-                'name': name,
-                'path': expanded_path,
-                'source': source,
-                'enabled': enabled,
-                'first_seen': datetime.now().isoformat(),
-                'last_seen': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
-            }
-            print(f"[БЭКАП] Добавлена новая запись: {name}")
-        
-        success = self._save_backup(backup)
-        print(f"[БЭКАП] Сохранение {'успешно' if success else 'не удалось'}")
-        return True
-    
-    def _remove_from_backup(self, name: str, source: str):
-        """Помечает запись как удаленную в бэкапе"""
-        backup = self._load_backup()
-        entry_key = f"{name}_{source}"  # Используем тот же формат ключа
-        
-        if entry_key in backup:
-            backup[entry_key]['deleted_at'] = datetime.now().isoformat()
-            backup[entry_key]['enabled'] = False
-            backup[entry_key]['updated_at'] = datetime.now().isoformat()
-            self._save_backup(backup)
-            print(f"[БЭКАП] Запись помечена как удаленная: {name}")
-            return True
-        else:
-            print(f"[БЭКАП] Запись не найдена для удаления: {name}")
-            return False
-    
-    def get_backup_entries(self) -> List[Dict]:
-        """Получает все записи из бэкапа"""
-        backup = self._load_backup()
-        entries = []
-        
-        for key, data in backup.items():
-            # Пропускаем записи без имени
-            if 'name' not in data:
-                continue
-            
-            # Проверяем, есть ли дубликаты (по имени и источнику)
-            name = data.get('name', '')
-            source = data.get('source', 'Unknown')
-            
-            # Проверяем, не добавлена ли уже такая запись
-            is_duplicate = any(e['name'] == name and e['source'] == source for e in entries)
-            if is_duplicate:
-                continue
-            
-            entries.append({
-                'name': name,
-                'path': data.get('path', ''),
-                'source': source,
-                'enabled': data.get('enabled', False),
-                'first_seen': data.get('first_seen', ''),
-                'last_seen': data.get('last_seen', ''),
-                'deleted_at': data.get('deleted_at', ''),
-                'is_deleted': 'deleted_at' in data
-            })
-        
-        # Сортируем по имени
-        entries.sort(key=lambda x: x['name'].lower())
-        return entries
-    
-    
-    def debug_enable_startup_with_path(self, app_name: str, app_path: str) -> bool:
-        """Отладочная версия enable_startup_with_path"""
-        print(f"[ОТЛАДКА] enable_startup_with_path: {app_name} -> {app_path}")
-        
-        # Проверяем путь
-        if not app_path:
-            print("[ОТЛАДКА] Путь пустой!")
-            return False
-        
-        # Нормализуем путь
-        clean_path = app_path.strip().strip('"')
-        print(f"[ОТЛАДКА] Нормализованный путь: {clean_path}")
-        
-        # Проверяем существование файла
-        if not os.path.exists(clean_path):
-            print(f"[ОТЛАДКА] Файл НЕ СУЩЕСТВУЕТ: {clean_path}")
-            return False
-        else:
-            print(f"[ОТЛАДКА] Файл существует: {clean_path}")
-        
-        # Проверяем, есть ли уже запись
-        entries = self.get_startup_entries()
-        for entry in entries:
-            if entry.name.lower() == app_name.lower():
-                if entry.enabled:
-                    print("[ОТЛАДКА] Запись уже включена")
-                    return True
-                print("[ОТЛАДКА] Запись есть, но отключена - удаляем")
-                self.disable_startup(app_name)
-                break
-        
-        # Добавляем запись в HKCU\Run
-        print(f"[ОТЛАДКА] Добавляем запись в реестр: {app_name} -> \"{clean_path}\"")
-        success = self._set_registry_value(
-            HKEY_CURRENT_USER,
-            REG_PATH_RUN,
-            app_name,
-            f'"{clean_path}"'
-        )
-        
-        print(f"[ОТЛАДКА] Результат записи в реестр: {success}")
-        
-        if success:
-            self._notify_system_changes()
-            # Сохраняем в бэкап
-            entries = self.get_startup_entries()
-            for entry in entries:
-                if entry.name.lower() == app_name.lower():
-                    self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
-                    break
-        
-        return success
-    
-    def restore_from_backup(self, name: str, source: str) -> bool:
-        """Восстанавливает запись из бэкапа в реестр"""
-        backup = self._load_backup()
-        entry_key = f"{name}_{source}"  # Тот же формат ключа
-        
-        if entry_key not in backup:
-            print(f"[БЭКАП] Запись не найдена: {entry_key}")
-            return False
-        
-        data = backup[entry_key]
-        app_path = data.get('path', '')
-        
-        # Раскрываем переменные окружения
-        expanded_path = os.path.expandvars(app_path.strip().strip('"'))
-        print(f"[БЭКАП] Восстановление: {name} -> {expanded_path}")
-        
-        # Проверяем, существует ли файл
-        if not os.path.exists(expanded_path):
-            print(f"[БЭКАП] Файл не существует: {expanded_path}")
-            return False
-        
-        # Восстанавливаем в соответствующий раздел реестра
-        if source == 'HKCU\\Run':
-            success = self._set_registry_value(HKEY_CURRENT_USER, REG_PATH_RUN, name, f'"{expanded_path}"')
-        elif source == 'HKLM\\Run':
-            success = self._set_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN, name, f'"{expanded_path}"')
-        elif source == 'HKLM\\Run (32-bit)':
-            success = self._set_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN_32, name, f'"{expanded_path}"')
-        else:
-            return False
-        
-        if success:
-            # Удаляем метку удаления из бэкапа
-            if 'deleted_at' in backup[entry_key]:
-                del backup[entry_key]['deleted_at']
-            backup[entry_key]['enabled'] = True
-            backup[entry_key]['updated_at'] = datetime.now().isoformat()
-            self._save_backup(backup)
-            print(f"[БЭКАП] Запись восстановлена: {name}")
-        
-        return success
-    
-    def enable_startup_from_backup(self, app_name: str, app_path: str) -> bool:
-        """
-        Включает автозагрузку для приложения используя путь из бэкапа.
-        
-        Args:
-            app_name: Имя приложения
-            app_path: Путь к исполняемому файлу из бэкапа
-            
-        Returns:
-            bool: True если успешно, False в противном случае
-        """
-        print(f"[БЭКАП] ВКЛЮЧЕНИЕ ИЗ БЭКАПА: {app_name} -> {app_path}")
-        
-        if not app_path:
-            print("[БЭКАП] Путь пустой!")
-            return False
-        
-        # Нормализуем путь
-        clean_path = app_path.strip().strip('"')
-        print(f"[БЭКАП] Нормализованный путь: {clean_path}")
-        
-        # РАСКРЫВАЕМ ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
-        expanded_path = os.path.expandvars(clean_path)
-        print(f"[БЭКАП] Раскрытый путь: {expanded_path}")
-        
-        # Проверяем существование файла с раскрытым путем
-        if not os.path.exists(expanded_path):
-            print(f"[БЭКАП] Файл НЕ СУЩЕСТВУЕТ: {expanded_path}")
-            
-            # Пробуем найти похожие файлы в папке
-            dir_path = os.path.dirname(expanded_path)
-            file_name = os.path.basename(expanded_path)
-            base_name = os.path.splitext(file_name)[0]
-            
-            print(f"[БЭКАП] Ищем похожие файлы в: {dir_path}")
-            if os.path.exists(dir_path):
+            return winreg.OpenKey(hive, path, 0, access)
+        except FileNotFoundError:
+            if writable:
                 try:
-                    # Ищем файлы с похожим именем
-                    for f in os.listdir(dir_path):
-                        # Ищем файлы .exe, начинающиеся с base_name
-                        if f.lower().startswith(base_name.lower()) and f.lower().endswith('.exe'):
-                            found_path = os.path.join(dir_path, f)
-                            print(f"[БЭКАП] Найден похожий файл: {found_path}")
-                            # Используем найденный файл
-                            expanded_path = found_path
-                            break
-                except Exception as e:
-                    print(f"[БЭКАП] Ошибка поиска: {e}")
-            
-            # Если не нашли похожий файл, пробуем найти по имени через where
-            if not os.path.exists(expanded_path):
-                print(f"[БЭКАП] Пробуем найти по имени: {app_name}")
-                return self.enable_startup(app_name)
-        
-        print(f"[БЭКАП] Используем путь: {expanded_path}")
-        
-        # Проверяем, есть ли уже запись
-        entries = self.get_startup_entries()
-        for entry in entries:
-            if entry.name.lower() == app_name.lower():
-                if entry.enabled:
-                    print("[БЭКАП] Запись уже включена")
-                    return True
-                print("[БЭКАП] Запись есть, но отключена - удаляем")
-                self.disable_startup(app_name)
-                break
-        
-        # Добавляем запись в HKCU\Run с РАСКРЫТЫМ путем
-        print(f"[БЭКАП] Добавляем запись в реестр: {app_name} -> \"{expanded_path}\"")
-        success = self._set_registry_value(
-            HKEY_CURRENT_USER,
-            REG_PATH_RUN,
-            app_name,
-            f'"{expanded_path}"'
-        )
-        
-        print(f"[БЭКАП] Результат: {success}")
-        
-        if success:
-            self._notify_system_changes()
-            # Сохраняем в бэкап
-            entries = self.get_startup_entries()
-            for entry in entries:
-                if entry.name.lower() == app_name.lower():
-                    self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
-                    break
-        
-        return success
-    
-    
-    def enable_startup_with_path(self, app_name: str, app_path: str) -> bool:
-        """
-        Включает автозагрузку для приложения с указанным путем.
-        
-        Args:
-            app_name: Имя приложения
-            app_path: Полный путь к исполняемому файлу
-            
-        Returns:
-            bool: True если успешно, False в противном случае
-        """
-        print(f"[БЭКАП] ВКЛЮЧЕНИЕ с путем: {app_name} -> {app_path}")
-        
-        # Проверяем, есть ли уже запись
-        entries = self.get_startup_entries()
-        for entry in entries:
-            if entry.name.lower() == app_name.lower():
-                if entry.enabled:
-                    return True
-                # Если запись отключена, удаляем её
-                self.disable_startup(app_name)
-                break
-        
-        # Проверяем, существует ли файл
-        if not os.path.exists(app_path):
-            print(f"[БЭКАП] Файл не существует: {app_path}")
-            return False
-        
-        # Добавляем запись в HKCU\Run
-        success = self._set_registry_value(
-            HKEY_CURRENT_USER,
-            REG_PATH_RUN,
-            app_name,
-            f'"{app_path}"'
-        )
-        
-        if success:
-            self._notify_system_changes()
-            # Сохраняем в бэкап
-            entries = self.get_startup_entries()
-            for entry in entries:
-                if entry.name.lower() == app_name.lower():
-                    self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
-                    break
-        
-        return success
-    
-    def get_startup_entries_with_backup(self) -> Tuple[List[StartupEntry], List[Dict]]:
-        """
-        Получает текущие записи автозагрузки и записи из бэкапа
-        Returns:
-            Tuple[List[StartupEntry], List[Dict]]: (текущие записи, бэкап записи)
-        """
-        current_entries = self.get_startup_entries()
-        backup_entries = self.get_backup_entries()
-        
-        # Отмечаем, какие записи из бэкапа уже есть в текущих
-        current_names = {(e.name, e.source) for e in current_entries}
-        
-        for backup_entry in backup_entries:
-            key = (backup_entry['name'], backup_entry['source'])
-            backup_entry['is_active'] = key in current_names
-        
-        return current_entries, backup_entries
-    
-    def enable_startup_with_backup(self, app_name: str) -> bool:
-        """Включает автозагрузку с сохранением в бэкап"""
-        print(f"[БЭКАП] ВКЛЮЧЕНИЕ: {app_name}")
-        
-        # Сначала включаем
-        result = self.enable_startup(app_name)
-        print(f"[БЭКАП] Результат включения: {result}")
-        
-        if result:
-            # Получаем обновленный список и сохраняем
-            entries = self.get_startup_entries()
-            for entry in entries:
-                if entry.name.lower() == app_name.lower():
-                    print(f"[БЭКАП] Найдена запись: {entry.name} - {entry.source}")
-                    self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
-                    break
-            else:
-                print(f"[БЭКАП] Запись {app_name} не найдена после включения")
-        
-        return result
-
-    def disable_startup_with_backup(self, app_name: str) -> bool:
-        """Отключает автозагрузку с сохранением в бэкап"""
-        print(f"[БЭКАП] ОТКЛЮЧЕНИЕ: {app_name}")
-        
-        # Сначала получаем информацию о записи
-        entries = self.get_startup_entries()
-        found = False
-        for entry in entries:
-            if entry.name.lower() == app_name.lower():
-                print(f"[БЭКАП] Найдена запись: {entry.name} - {entry.source}")
-                self._backup_registry_entry(entry.name, entry.path, entry.source, entry.enabled)
-                found = True
-                break
-        
-        if not found:
-            print(f"[БЭКАП] Запись {app_name} не найдена в текущей автозагрузке")
-            # Возвращаем True, так как записи нет - ничего отключать не нужно
-            return True
-        
-        # Затем отключаем
-        result = self.disable_startup(app_name)
-        print(f"[БЭКАП] Результат отключения: {result}")
-        return result
-    
-    def _get_startup_folder_path(self) -> Path:
-        """Получает путь к папке автозагрузки текущего пользователя"""
-        try:
-            appdata = os.environ.get('APPDATA', '')
-            if appdata:
-                startup_path = Path(appdata) / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
-                if startup_path.exists():
-                    return startup_path
-        except Exception:
-            pass
-        
-        userprofile = os.environ.get('USERPROFILE', '')
-        if userprofile:
-            return Path(userprofile) / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
-        
-        return Path()
-    
-    def _get_registry_key(self, hkey: int, subkey: str, access: int = winreg.KEY_READ) -> Optional[winreg.HKEYType]:
-        """Безопасное открытие ключа реестра"""
-        try:
-            return winreg.OpenKey(hkey, subkey, 0, access)
-        except WindowsError:
+                    return winreg.CreateKeyEx(hive, path, 0, access)
+                except Exception:
+                    return None
             return None
-    
-    def _get_registry_value(self, hkey: int, subkey: str, name: str) -> Tuple[Optional[str], Optional[int]]:
-        """Получает значение из реестра"""
-        try:
-            key = winreg.OpenKey(hkey, subkey, 0, winreg.KEY_READ)
-            try:
-                value, reg_type = winreg.QueryValueEx(key, name)
-                return value, reg_type
-            except FileNotFoundError:
-                return None, None
-            finally:
-                winreg.CloseKey(key)
-        except WindowsError:
-            return None, None
-    
-    def _set_registry_value(self, hkey: int, subkey: str, name: str, value: str) -> bool:
-        """Устанавливает значение в реестре"""
-        try:
-            key = winreg.OpenKey(hkey, subkey, 0, winreg.KEY_SET_VALUE)
-            try:
-                winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
-                return True
-            except Exception:
-                return False
-            finally:
-                winreg.CloseKey(key)
-        except WindowsError:
-            try:
-                key = winreg.CreateKey(hkey, subkey)
-                winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
-                winreg.CloseKey(key)
-                return True
-            except Exception:
-                return False
-    
-    def _delete_registry_value(self, hkey: int, subkey: str, name: str) -> bool:
-        """Удаляет значение из реестра"""
-        try:
-            key = winreg.OpenKey(hkey, subkey, 0, winreg.KEY_SET_VALUE)
-            try:
-                winreg.DeleteValue(key, name)
-                return True
-            except FileNotFoundError:
-                return True
-            except Exception:
-                return False
-            finally:
-                winreg.CloseKey(key)
-        except WindowsError:
-            return False
-    
-    def _normalize_path(self, path: str) -> str:
-        """Нормализует путь, удаляя кавычки и лишние пробелы"""
-        if not path:
-            return ""
-        path = path.strip().strip('"')
-        return path
-    
-    def _notify_system_changes(self):
-        """Уведомляет систему об изменениях в автозагрузке"""
-        try:
-            ctypes.windll.user32.SendMessageTimeoutW(
-                ctypes.c_void_p(0xFFFF),
-                0x001A,
-                0,
-                "Environment",
-                0x0002,
-                5000,
-                ctypes.byref(ctypes.c_ulong())
-            )
-            
-            ctypes.windll.shell32.SHChangeNotify(
-                0x08000000,
-                0x0000,
-                None,
-                None
-            )
-        except Exception:
-            pass
-    
-    def get_startup_entries(self) -> List[StartupEntry]:
-        """
-        Получает список всех записей автозагрузки с РЕАЛЬНЫМ состоянием
+
+    def _get_disabled_names(self, hive: int, is_32bit: bool) -> set:
+        """Возвращает множество имен, отключенных через StartupApproved."""
+        disabled = set()
+        key = self._get_approved_key(hive, is_32bit)
+        if not key:
+            return disabled
         
-        Returns:
-            List[StartupEntry]: Список записей автозагрузки
-        """
+        try:
+            i = 0
+            while True:
+                try:
+                    name, value, _ = winreg.EnumValue(key, i)
+                    # Если первый байт не 0x02 и не 0x06 (и не 0x00), значит отключено (обычно 0x03)
+                    if isinstance(value, bytes) and len(value) > 0:
+                        if value[0] not in (0x02, 0x06, 0x00):
+                            disabled.add(name)
+                    i += 1
+                except OSError:
+                    break
+        finally:
+            winreg.CloseKey(key)
+        return disabled
+
+    def get_startup_entries(self) -> List[StartupEntry]:
         entries = []
         seen = set()
-        
-        # 1. Записи из реестра HKCU\Run
-        key = self._get_registry_key(HKEY_CURRENT_USER, REG_PATH_RUN)
-        if key:
-            try:
-                i = 0
-                while True:
-                    try:
-                        name = winreg.EnumValue(key, i)[0]
-                        path = winreg.EnumValue(key, i)[1]
-                        
-                        # КРИТИЧНО: проверяем, что путь существует и файл доступен
-                        is_enabled = False
-                        if path and path.strip():
-                            # Проверяем, что путь ведет к существующему файлу
-                            normalized_path = self._normalize_path(path)
-                            if normalized_path and os.path.exists(normalized_path):
-                                is_enabled = True
-                            # Если это не файл, но путь не пустой - считаем включенным
-                            elif path.strip():
-                                is_enabled = True
-                        
-                        if name and name not in seen:
-                            entries.append(StartupEntry(
-                                name=name,
-                                path=path if path else "",
-                                source="HKCU\\Run",
-                                enabled=is_enabled
-                            ))
-                            seen.add(name)
-                        i += 1
-                    except WindowsError:
-                        break
-            finally:
-                winreg.CloseKey(key)
-        
-        # 2. Записи из реестра HKLM\Run
-        key = self._get_registry_key(HKEY_LOCAL_MACHINE, REG_PATH_RUN)
-        if key:
-            try:
-                i = 0
-                while True:
-                    try:
-                        name = winreg.EnumValue(key, i)[0]
-                        path = winreg.EnumValue(key, i)[1]
-                        
-                        is_enabled = False
-                        if path and path.strip():
-                            normalized_path = self._normalize_path(path)
-                            if normalized_path and os.path.exists(normalized_path):
-                                is_enabled = True
-                            elif path.strip():
-                                is_enabled = True
-                        
-                        if name and name not in seen:
-                            entries.append(StartupEntry(
-                                name=name,
-                                path=path if path else "",
-                                source="HKLM\\Run",
-                                enabled=is_enabled
-                            ))
-                            seen.add(name)
-                        i += 1
-                    except WindowsError:
-                        break
-            finally:
-                winreg.CloseKey(key)
-        
-        # 3. Записи из реестра HKLM\Run (32-bit)
-        key = self._get_registry_key(HKEY_LOCAL_MACHINE, REG_PATH_RUN_32)
-        if key:
-            try:
-                i = 0
-                while True:
-                    try:
-                        name = winreg.EnumValue(key, i)[0]
-                        path = winreg.EnumValue(key, i)[1]
-                        
-                        is_enabled = False
-                        if path and path.strip():
-                            normalized_path = self._normalize_path(path)
-                            if normalized_path and os.path.exists(normalized_path):
-                                is_enabled = True
-                            elif path.strip():
-                                is_enabled = True
-                        
-                        if name and name not in seen:
-                            entries.append(StartupEntry(
-                                name=name,
-                                path=path if path else "",
-                                source="HKLM\\Run (32-bit)",
-                                enabled=is_enabled
-                            ))
-                            seen.add(name)
-                        i += 1
-                    except WindowsError:
-                        break
-            finally:
-                winreg.CloseKey(key)
-        
-        # 4. Ярлыки из папки автозагрузки (всегда включены)
-        if self._startup_folder and self._startup_folder.exists():
-            for lnk in self._startup_folder.glob("*.lnk"):
-                name = lnk.stem
-                if name not in seen:
-                    entries.append(StartupEntry(
-                        name=name,
-                        path=str(lnk),
-                        source="Startup Folder",
-                        enabled=True  # Ярлыки в папке всегда включены
-                    ))
-                    seen.add(name)
-        
-        return entries
-    
-    def enable_startup(self, app_name: str) -> bool:
-        """
-        Включает автозагрузку для приложения.
-        
-        Args:
-            app_name: Имя приложения (без расширения .exe)
-            
-        Returns:
-            bool: True если успешно, False в противном случае
-        """
-        # Проверяем, есть ли уже запись
-        entries = self.get_startup_entries()
-        for entry in entries:
-            if entry.name.lower() == app_name.lower():
-                if entry.enabled:
-                    return True
-                # Если запись отключена, удаляем её и создадим заново
-                self.disable_startup(app_name)
-                break
-        
-        # Ищем исполняемый файл
-        exe_path = self._find_executable(app_name)
-        if not exe_path:
-            return False
-        
-        # Добавляем запись в HKCU\Run
-        success = self._set_registry_value(
-            HKEY_CURRENT_USER,
-            REG_PATH_RUN,
-            app_name,
-            f'"{exe_path}"'
-        )
-        
-        if success:
-            self._notify_system_changes()
-        
-        return success
-    
-    def disable_startup(self, app_name: str) -> bool:
-        """
-        Отключает автозагрузку для приложения.
-        Удаляет запись из реестра.
-        
-        Args:
-            app_name: Имя приложения
-            
-        Returns:
-            bool: True если успешно, False в противном случае
-        """
-        found = False
-        
-        # Проверяем и удаляем из HKCU\Run
-        value, _ = self._get_registry_value(HKEY_CURRENT_USER, REG_PATH_RUN, app_name)
-        if value is not None:
-            if self._delete_registry_value(HKEY_CURRENT_USER, REG_PATH_RUN, app_name):
-                found = True
-        
-        # Проверяем и удаляем из HKLM\Run
-        value, _ = self._get_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN, app_name)
-        if value is not None:
-            if self._delete_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN, app_name):
-                found = True
-        
-        # Проверяем и удаляем из HKLM\Run (32-bit)
-        value, _ = self._get_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN_32, app_name)
-        if value is not None:
-            if self._delete_registry_value(HKEY_LOCAL_MACHINE, REG_PATH_RUN_32, app_name):
-                found = True
-        
-        if found:
-            self._notify_system_changes()
-        
-        return found
-    
-    def _find_executable(self, app_name: str) -> Optional[str]:
-        """
-        Ищет исполняемый файл приложения в системе
-        
-        Args:
-            app_name: Имя приложения
-            
-        Returns:
-            str: Путь к исполняемому файлу или None
-        """
-        if not app_name.endswith('.exe'):
-            search_names = [app_name + '.exe']
-        else:
-            search_names = [app_name]
-        
-        standard_paths = [
-            r"C:\Program Files",
-            r"C:\Program Files (x86)",
-            os.environ.get('ProgramFiles', r'C:\Program Files'),
-            os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)'),
-            os.environ.get('LOCALAPPDATA', ''),
-            os.environ.get('APPDATA', ''),
-        ]
-        
-        path_env = os.environ.get('PATH', '').split(os.pathsep)
-        standard_paths.extend(path_env)
-        
-        for base_path in standard_paths:
-            if not base_path:
-                continue
-            base = Path(base_path)
-            for name in search_names:
-                direct = base / name
-                if direct.exists():
-                    return str(direct)
-                
-                for subdir in [base / name.replace('.exe', ''), base / name.replace('.exe', '').lower()]:
-                    if subdir.exists() and subdir.is_dir():
-                        exe = subdir / name
-                        if exe.exists():
-                            return str(exe)
+
+        # 1. HKCU\Run
+        self._read_registry_branch(HKEY_CURRENT_USER, REG_PATH_RUN, False, "HKCU\\Run", entries, seen)
+        # 2. HKLM\Run
+        self._read_registry_branch(HKEY_LOCAL_MACHINE, REG_PATH_RUN, False, "HKLM\\Run", entries, seen)
+        # 3. HKLM\Run (32-bit)
+        self._read_registry_branch(HKEY_LOCAL_MACHINE, REG_PATH_RUN_32, True, "HKLM\\Run (32-bit)", entries, seen)
+        # 4. Папка Startup
+        self._read_startup_folder(entries, seen)
+        # 5. Планировщик задач
+        self._read_scheduled_tasks(entries, seen)
+
+        return sorted(entries, key=lambda x: x.name.lower())
+
+    def _get_approved_states(self, hive: int, is_32bit: bool) -> dict:
+        """Возвращает словарь {имя: is_enabled} для всех записей в StartupApproved."""
+        states = {}
+        key = self._get_approved_key(hive, is_32bit)
+        if not key:
+            return states
         
         try:
-            for name in search_names:
-                result = subprocess.run(
-                    ['where', name],
-                    capture_output=True,
-                    text=True,
-                    shell=True
-                )
-                if result.returncode == 0 and result.stdout.strip():
-                    paths = result.stdout.strip().split('\n')
-                    for p in paths:
-                        if p and os.path.exists(p):
-                            return p
-        except:
-            pass
+            i = 0
+            while True:
+                try:
+                    name, value, _ = winreg.EnumValue(key, i)
+                    if isinstance(value, bytes) and len(value) > 0:
+                        # 0x02, 0x06, 0x00 = ВКЛЮЧЕНО. 0x03, 0x07 = ОТКЛЮЧЕНО.
+                        # (0x01 тоже иногда встречается как отключенное)
+                        is_disabled = value[0] in (0x03, 0x07, 0x01)
+                        states[name] = not is_disabled  # True = включено, False = отключено
+                    i += 1
+                except OSError:
+                    break
+        finally:
+            winreg.CloseKey(key)
+        return states
+
+    def _read_registry_branch(self, hive: int, run_path: str, is_32bit: bool, source: str, entries: list, seen: set):
+        try:
+            key = winreg.OpenKey(hive, run_path, 0, winreg.KEY_READ)
+        except FileNotFoundError:
+            return
         
-        return None
+        approved_states = self._get_approved_states(hive, is_32bit)
+
+        try:
+            i = 0
+            while True:
+                try:
+                    name, path, _ = winreg.EnumValue(key, i)
+                    if name and name not in seen:
+                        seen.add(name)
+                        
+                        # ПО УМОЛЧАНИЮ СЧИТАЕМ ВКЛЮЧЕННОЙ (если нет записи в StartupApproved)
+                        is_enabled = True
+                        
+                        # Проверяем статус по имени ключа
+                        if name in approved_states:
+                            is_enabled = approved_states[name]
+                        
+                        # Если по ключу не нашли, проверяем по имени exe
+                        if name not in approved_states:
+                            exe_name = self._get_exe_name(path)
+                            if exe_name and exe_name in approved_states:
+                                is_enabled = approved_states[exe_name]
+
+                        entries.append(StartupEntry(
+                            name=name,
+                            path=path,
+                            source=source,
+                            enabled=is_enabled
+                        ))
+                    i += 1
+                except OSError:
+                    break
+        finally:
+            winreg.CloseKey(key)
+
+    def _read_startup_folder(self, entries: list, seen: set):
+        if not self._startup_folder or not os.path.exists(self._startup_folder):
+            return
+        for file in os.listdir(self._startup_folder):
+            if file.endswith('.lnk'):
+                name = os.path.splitext(file)[0]
+                if name not in seen:
+                    seen.add(name)
+                    entries.append(StartupEntry(
+                        name=name,
+                        path=os.path.join(self._startup_folder, file),
+                        source="Startup Folder",
+                        enabled=True
+                    ))
+
+    def _get_exe_name(self, path: str) -> str:
+        """Извлекает имя exe из пути (для проверки в StartupApproved)."""
+        if not path:
+            return ""
+        clean_path = path.strip('"')
+        if '" ' in clean_path:
+            clean_path = clean_path.split('"')[1]
+        elif ' ' in clean_path and '"' not in clean_path:
+            clean_path = clean_path.split(' ')[0]
+        return os.path.basename(clean_path)
     
-    def toggle_startup(self, app_name: str) -> bool:
-        """
-        Переключает состояние автозагрузки приложения
-        
-        Args:
-            app_name: Имя приложения
+    def _read_scheduled_tasks(self, entries: list, seen: set):
+        """Читает задачи из Планировщика заданий."""
+        try:           
+            # Запускаем schtasks
+            result = subprocess.run(
+                ['schtasks', '/query', '/fo', 'CSV', '/v'],
+                capture_output=True,
+                text=True,
+                encoding='cp866',
+                errors='replace', # Не падаем на неизвестных символах
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
             
-        Returns:
-            bool: True если включено после переключения, False если выключено
-        """
-        entries = self.get_startup_entries()
-        is_enabled = any(e.name.lower() == app_name.lower() and e.enabled for e in entries)
+            if result.returncode != 0:
+                print(f"[SCHED] Ошибка schtasks: {result.stderr}")
+                return
+
+            output = result.stdout
+            if not output:
+                print("[SCHED] Пустой ответ")
+                return
+
+            # Парсим CSV
+            reader = csv.reader(io.StringIO(output))
+            headers = next(reader, None)
+            if not headers:
+                print("[SCHED] Нет заголовков")
+                return
+
+            # Ищем индексы колонок
+            def find_idx(names):
+                for name in names:
+                    if name in headers:
+                        return headers.index(name)
+                return -1
+
+            task_idx = find_idx(['Имя задачи', 'TaskName'])
+            status_idx = find_idx(['Состояние', 'Status'])
+            schedule_idx = find_idx(['Расписание', 'Schedule'])
+            
+            if task_idx == -1:
+                print("[SCHED] Не найдена колонка 'Имя задачи'")
+                return
+
+            count = 0
+            for row in reader:
+                if len(row) <= task_idx:
+                    continue
+
+                task_name = row[task_idx]
+                
+                # Пропускаем повторяющиеся заголовки таблицы ---
+                if task_name in ['Имя задачи', 'TaskName']:
+                    continue
+                
+                # Пропускаем системные задачи
+                if task_name.startswith('\\Microsoft\\'):
+                    continue
+                
+                # Пропускаем пустые строки
+                if not task_name.strip():
+                    continue
+
+                # Проверяем статус
+                is_enabled = True
+                if status_idx != -1 and len(row) > status_idx:
+                    status = row[status_idx]
+                    # Если статус "Отключено" или "Disabled", значит выключено
+                    is_enabled = status not in ['Отключено', 'Disabled']
+
+                key = f"Task:{task_name}"
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                entries.append(StartupEntry(
+                    name=task_name.split('\\')[-1],
+                    path=task_name,
+                    source="Планировщик",
+                    enabled=is_enabled
+                ))
+                count += 1
+
+        except Exception as e:
+            print(f"[SCHED] Исключение: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # --- Управление ---
+
+    def disable_startup(self, app_name: str, source: str, path: str) -> bool:
+        if source == "Startup Folder":
+            return self._disable_folder_entry(app_name)
         
-        if is_enabled:
-            self.disable_startup(app_name)
+        if source == "Планировщик":
+            return self._toggle_task(path, enable=False)
+
+        hive = HKEY_CURRENT_USER if source.startswith("HKCU") else HKEY_LOCAL_MACHINE
+        is_32bit = "(32-bit)" in source
+
+        try:
+            key = self._get_approved_key(hive, is_32bit, writable=True)
+            if not key:
+                return False
+
+            # Флаг 0x03 = отключено
+            disabled_flag = bytes([0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+            
+            winreg.SetValueEx(key, app_name, 0, winreg.REG_BINARY, disabled_flag)
+            
+            # Дополнительно пишем под именем exe
+            exe_name = self._get_exe_name(path)
+            if exe_name and exe_name != app_name:
+                winreg.SetValueEx(key, exe_name, 0, winreg.REG_BINARY, disabled_flag)
+
+            winreg.CloseKey(key)
+            return True
+        except Exception as e:
+            print(f"Ошибка отключения {app_name}: {e}")
             return False
-        else:
-            return self.enable_startup(app_name)
-    
-    def is_startup_enabled(self, app_name: str) -> bool:
-        """
-        Проверяет, включена ли автозагрузка для приложения
-        
-        Args:
-            app_name: Имя приложения
-            
-        Returns:
-            bool: True если включена, False в противном случае
-        """
-        entries = self.get_startup_entries()
-        return any(e.name.lower() == app_name.lower() and e.enabled for e in entries)
-    
-    def get_startup_path(self, app_name: str) -> Optional[str]:
-        """
-        Получает путь к исполняемому файлу, используемому в автозагрузке
-        
-        Args:
-            app_name: Имя приложения
-            
-        Returns:
-            str: Путь к исполняемому файлу или None
-        """
-        entries = self.get_startup_entries()
-        for entry in entries:
-            if entry.name.lower() == app_name.lower():
-                return self._normalize_path(entry.path)
-        return None
-    
-    def get_common_app_names(self) -> Dict[str, str]:
-        """Возвращает словарь распространённых приложений"""
-        return {
-            'rtkaudservice64': 'RtkAudService64',
-            'securityhealthsystray': 'SecurityHealthSystray',
-            'xbox': 'Xbox',
-            'torrent': 'Torrent Client',
-            'terminal': 'Терминал',
-            'yandexmusic': 'Яндекс.Музыка',
-            'canonquickmenu': 'Canon Quick Menu',
-            'onedrive': 'OneDrive',
-            'msedge': 'msedge',
-            'browser': 'browser',
-            'utweb': 'Utweb'
-        }
-    
-    def auto_manage(self, app_names: List[str], enable: bool = True) -> Dict[str, bool]:
-        """Массовое управление автозагрузкой"""
-        results = {}
-        common_names = self.get_common_app_names()
-        
-        for name in app_names:
-            search_name = name
-            if name.lower() in common_names:
-                search_name = common_names[name.lower()]
-            
-            if enable:
-                results[name] = self.enable_startup(search_name)
-            else:
-                results[name] = self.disable_startup(search_name)
-        
-        return results
 
+    def enable_startup(self, app_name: str, source: str, path: str) -> bool:
+        if source == "Startup Folder":
+            return self._enable_folder_entry(app_name)
+        
+        if source == "Планировщик":
+            return self._toggle_task(path, enable=True)
 
-if __name__ == "__main__":
-    manager = StartupManager()
+        hive = HKEY_CURRENT_USER if source.startswith("HKCU") else HKEY_LOCAL_MACHINE
+        is_32bit = "(32-bit)" in source
+
+        try:
+            key = self._get_approved_key(hive, is_32bit, writable=True)
+            if not key:
+                return True # Если ключа нет, значит уже включено
+
+            # Удаляем запись из StartupApproved (по умолчанию Windows считает программу включенной)
+            try:
+                winreg.DeleteValue(key, app_name)
+            except FileNotFoundError:
+                pass
+
+            # Удаляем по имени exe
+            exe_name = self._get_exe_name(path)
+            if exe_name and exe_name != app_name:
+                try:
+                    winreg.DeleteValue(key, exe_name)
+                except FileNotFoundError:
+                    pass
+
+            winreg.CloseKey(key)
+            return True
+        except Exception as e:
+            print(f"Ошибка включения {app_name}: {e}")
+            return False
+
+    def _disable_folder_entry(self, name: str) -> bool:
+        try:
+            src = os.path.join(self._startup_folder, name + ".lnk")
+            disabled_dir = os.path.join(os.path.dirname(self._startup_folder), "Startup_Disabled")
+            os.makedirs(disabled_dir, exist_ok=True)
+            if os.path.exists(src):
+                os.replace(src, os.path.join(disabled_dir, name + ".lnk"))
+                return True
+        except Exception as e:
+            print(f"Ошибка отключения папки {name}: {e}")
+        return False
+
+    def _enable_folder_entry(self, name: str) -> bool:
+        try:
+            disabled_dir = os.path.join(os.path.dirname(self._startup_folder), "Startup_Disabled")
+            src = os.path.join(disabled_dir, name + ".lnk")
+            if os.path.exists(src):
+                os.replace(src, os.path.join(self._startup_folder, name + ".lnk"))
+                return True
+        except Exception as e:
+            print(f"Ошибка включения папки {name}: {e}")
+        return False
     
-    print("\n=== ВСЕ ЗАПИСИ АВТОЗАГРУЗКИ ===")
-    entries = manager.get_startup_entries()
-    for entry in entries:
-        print(f"{entry.name}: {'✅ ВКЛЮЧЕНА' if entry.enabled else '❌ ОТКЛЮЧЕНА'} - {entry.source}")
-        print(f"  Путь: {entry.path}")
-        print()
-    
-    print(f"\nПапка автозагрузки: {manager._startup_folder}")
+    def _toggle_task(self, task_path: str, enable: bool) -> bool:
+        """Включает или отключает задачу Планировщика."""
+        try:
+            action = '/enable' if enable else '/disable'
+            # Важно: путь задачи должен быть в кавычках
+            result = subprocess.run(
+                ['schtasks', '/change', '/tn', task_path, action],
+                capture_output=True,
+                text=True,
+                encoding='cp866',
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            return result.returncode == 0
+        except Exception as e:
+            print(f"Ошибка изменения задачи {task_path}: {e}")
+            return False

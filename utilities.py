@@ -211,20 +211,51 @@ def get_ddr_type():
     
     return ddr_type + str(speed) +"МГц (" + part_number + ")" if part_number and part_number != "Unknown" else ddr_type + str(speed) +"МГц"
 
-# Функция для получения модели материнской платы      
+# Функция для проверки наличия батареи (признак ноутбука)
+def is_laptop():
+    try:
+        pythoncom.CoInitialize()
+        c = wmi.WMI()
+        # Ищем любую батарею
+        batteries = c.Win32_Battery()
+        return len(batteries) > 0
+    except Exception:
+        return False
+    finally:
+        pythoncom.CoUninitialize()
+
+# Функция для получения модели материнской платы или ноутбука   
 def get_board_model():
-    c = wmi.WMI()
-    # Запрашиваем информацию о материнской плате (BaseBoard)
-    for board in c.Win32_BaseBoard():
-        board_brand = board.Manufacturer
-        board_model = board.Product  # Модель обычно хранится в Product
-    
-    manufacturer_laptop = c.Win32_ComputerSystem()[0].Manufacturer
-    manufacturer_laptop = manufacturer_laptop + " " if manufacturer_laptop != "System manufacturer" else ""
-    model_laptop = c.Win32_ComputerSystem()[0].Model
-    model_laptop = model_laptop + " " if model_laptop != "System Product Name" else ""
-    
-    return manufacturer_laptop + model_laptop + board_brand + " " + board_model
+    pythoncom.CoInitialize()
+    try:
+        c = wmi.WMI()
+        
+        if is_laptop():
+            # Это ноутбук: берем модель из Win32_ComputerSystem
+            for cs in c.Win32_ComputerSystem():
+                manufacturer = cs.Manufacturer.strip() if cs.Manufacturer else ""
+                model = cs.Model.strip() if cs.Model else ""
+                
+                # Отсекаем стандартные заглушки Windows
+                if model and model != "System Product Name" and model != "To Be Filled By O.E.M.":
+                    return f"{manufacturer} {model}".strip()
+        else:
+            # Это десктоп: берем модель материнской платы
+            for board in c.Win32_BaseBoard():
+                manufacturer = board.Manufacturer.strip() if board.Manufacturer else ""
+                product = board.Product.strip() if board.Product else ""
+                
+                if product and product != "System Product Name":
+                    return f"{manufacturer} {product}".strip()
+
+        # Fallback, если ничего не нашли
+        return "Неизвестно"
+        
+    except Exception as e:
+        print(f"Ошибка определения модели: {e}")
+        return "Неизвестно"
+    finally:
+        pythoncom.CoUninitialize()
 
 # Функция для получения модели сетевой карты
 def get_network_adapter_model():
