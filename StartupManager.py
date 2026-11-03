@@ -6,6 +6,8 @@ import csv
 import io
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
+import win32com.client
+import pythoncom
 
 HKEY_CURRENT_USER = winreg.HKEY_CURRENT_USER
 HKEY_LOCAL_MACHINE = winreg.HKEY_LOCAL_MACHINE
@@ -183,92 +185,49 @@ class StartupManager:
         return os.path.basename(clean_path)
     
     def _read_scheduled_tasks(self, entries: list, seen: set):
-        """Читает задачи из Планировщика заданий."""
-        try:           
-            # Запускаем schtasks
-            result = subprocess.run(
-                ['schtasks', '/query', '/fo', 'CSV', '/v'],
-                capture_output=True,
-                text=True,
-                encoding='cp866',
-                errors='replace', # Не падаем на неизвестных символах
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
+        """Читает задачи из Планировщика заданий через COM (быстро, как в C#)."""
+        pythoncom.CoInitialize()
+        try:
+            scheduler = win32com.client.Dispatch("Schedule.Service")
+            scheduler.Connect()
             
-            if result.returncode != 0:
-                print(f"[SCHED] Ошибка schtasks: {result.stderr}")
-                return
+            root_folder = scheduler.GetFolder("\\")
+            # Получаем все задачи рекурсивно (True)
+            tasks = root_folder.GetTasks(1) # 1 = TASK_ENUM_HIDDEN
 
-            output = result.stdout
-            if not output:
-                print("[SCHED] Пустой ответ")
-                return
+            for task in tasks:
+                try:
+                    task_path = task.Path
+                    
+                    # Пропускаем системные задачи Microsoft
+                    if task_path.startswith('\\Microsoft\\'):
+                        continue
 
-            # Парсим CSV
-            reader = csv.reader(io.StringIO(output))
-            headers = next(reader, None)
-            if not headers:
-                print("[SCHED] Нет заголовков")
-                return
+                    # Получаем имя задачи (последняя часть пути)
+                    task_name = task_path.split('\\')[-1]
+                    
+                    # Проверяем, включена ли задача
+                    is_enabled = task.Enabled
 
-            # Ищем индексы колонок
-            def find_idx(names):
-                for name in names:
-                    if name in headers:
-                        return headers.index(name)
-                return -1
+                    key = f"Task:{task_path}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
 
-            task_idx = find_idx(['Имя задачи', 'TaskName'])
-            status_idx = find_idx(['Состояние', 'Status'])
-            schedule_idx = find_idx(['Расписание', 'Schedule'])
-            
-            if task_idx == -1:
-                print("[SCHED] Не найдена колонка 'Имя задачи'")
-                return
-
-            count = 0
-            for row in reader:
-                if len(row) <= task_idx:
+                    entries.append(StartupEntry(
+                        name=task_name,
+                        path=task_path,
+                        source="Планировщик",
+                        enabled=is_enabled
+                    ))
+                except Exception as e:
+                    # Пропускаем задачи, к которым нет доступа
                     continue
-
-                task_name = row[task_idx]
-                
-                # Пропускаем повторяющиеся заголовки таблицы ---
-                if task_name in ['Имя задачи', 'TaskName']:
-                    continue
-                
-                # Пропускаем системные задачи
-                if task_name.startswith('\\Microsoft\\'):
-                    continue
-                
-                # Пропускаем пустые строки
-                if not task_name.strip():
-                    continue
-
-                # Проверяем статус
-                is_enabled = True
-                if status_idx != -1 and len(row) > status_idx:
-                    status = row[status_idx]
-                    # Если статус "Отключено" или "Disabled", значит выключено
-                    is_enabled = status not in ['Отключено', 'Disabled']
-
-                key = f"Task:{task_name}"
-                if key in seen:
-                    continue
-                seen.add(key)
-
-                entries.append(StartupEntry(
-                    name=task_name.split('\\')[-1],
-                    path=task_name,
-                    source="Планировщик",
-                    enabled=is_enabled
-                ))
-                count += 1
 
         except Exception as e:
-            print(f"[SCHED] Исключение: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[SCHED] Ошибка COM: {e}")
+        finally:
+            pythoncom.CoUninitialize()
     
     # --- Управление ---
 
@@ -365,6 +324,7 @@ class StartupManager:
         """Включает или отключает задачу Планировщика."""
         try:
             action = '/enable' if enable else '/disable'
+            print(f'schtasks /change /tn {task_path} {action}')
             # Важно: путь задачи должен быть в кавычках
             result = subprocess.run(
                 ['schtasks', '/change', '/tn', task_path, action],

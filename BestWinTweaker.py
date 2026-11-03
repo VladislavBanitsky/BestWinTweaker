@@ -1119,7 +1119,7 @@ class BestWinTweaker:
             for entry in entries:
                 # Формируем словарь для UI
                 program = {
-                    "display_name": entry.name[:15],
+                    "display_name": entry.name,
                     "path": entry.path,
                     "source": entry.source,
                     "enabled": entry.enabled,
