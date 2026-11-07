@@ -106,7 +106,7 @@ class BestWinTweaker:
         Если сохранённой геометрии нет — окно центрируется с дефолтным размером.
         Корректно работает при любом DPI-масштабе ОС.
         """
-        default_w, default_h = 1400, 690
+        default_w, default_h = 1450, 690
 
         # Нужно, чтобы окно уже существовало и Tk знал его DPI-scaling
         self.window.update_idletasks()
@@ -381,38 +381,45 @@ class BestWinTweaker:
         # Создаем экземпляр класса удаления
         self.uwp_remover = UWPRemover(self.window)
         
-        # Основной контейнер
-        main_frame = ctk.CTkFrame(self.uwp_tab)
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # Верхняя панель
-        top_frame = ctk.CTkFrame(main_frame)
-        top_frame.pack(fill="x", padx=10, pady=5)
-        
         # Заголовок
         title_label = ctk.CTkLabel(
-            top_frame,
+            self.uwp_tab,
             text="Управление UWP-приложениями",
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(size=24, weight="bold")
         )
-        title_label.pack(side="left", padx=10)
-        
-        # Кнопка обновления
-        self.refresh_uwp_btn = ctk.CTkButton(
-            top_frame,
-            text="Обновить список",
-            command=self.load_uwp_apps,
-            width=120
-        )
-        self.refresh_uwp_btn.pack(side="right", padx=10)
+        title_label.pack(pady=(5, 20))
         
         # Контейнер со скроллом
-        self.uwp_container = ctk.CTkScrollableFrame(main_frame)
+        self.uwp_container = ctk.CTkScrollableFrame(self.uwp_tab)
         self.uwp_container.pack(fill="both", expand=True, padx=10, pady=10)
         
         # Переменные
         self.uwp_apps = []
         self.uwp_vars = {}
+        
+        # Панель с кнопками
+        control_frame = ctk.CTkFrame(self.uwp_tab)
+        control_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Кнопка удаления выбранных приложений (на том же фрейме)
+        self.remove_selected_uwp_btn = ctk.CTkButton(
+            control_frame,
+            text="Удалить выбранные",
+            command=self.remove_selected_uwp_apps,
+            width=150,
+            fg_color="red",
+            hover_color="darkred"
+        )
+        self.remove_selected_uwp_btn.pack(side="left", padx=5)
+        
+        # Кнопка обновления
+        self.refresh_uwp_btn = ctk.CTkButton(
+            control_frame,
+            text="Обновить список",
+            command=self.load_uwp_apps,
+            width=120
+        )
+        self.refresh_uwp_btn.pack(side="left", padx=10)
 
     def load_uwp_apps(self):
         """Загрузка UWP-приложений"""
@@ -531,38 +538,52 @@ class BestWinTweaker:
                 anchor="w"
             )
             details_label.pack(anchor="w")
-            
-            # Кнопка удаления
-            remove_btn = ctk.CTkButton(
-                app_frame,
-                text="Удалить",
-                width=70,
-                height=25,
-                fg_color="red",
-                hover_color="darkred",
-                command=lambda p=app['package_name'], n=app['name']: self.remove_uwp_app(p, n)
-            )
-            remove_btn.pack(side="right", padx=5)
         
         self.refresh_uwp_btn.configure(state="normal")
+    
+    def remove_selected_uwp_apps(self):
+        """Удаление всех выбранных UWP-приложений"""
+        selected = [
+            (package_name, app_name)
+            for package_name, var in self.uwp_vars.items()
+            if var.get()
+        ]
 
-    def remove_uwp_app(self, package_name, app_name):
-        """Удаление UWP-приложения"""
-        if not messagebox.askyesno("Подтверждение", f"Удалить '{app_name}'?\n\nЭто действие нельзя отменить."):
+        if not selected:
+            messagebox.showinfo("Ничего не выбрано", "Отметьте приложения для удаления.")
             return
-        
-        self.status_manager.set_status(text=f"Удаление {app_name}...", color="orange", priority=1)
+
+        names_preview = ", ".join(name for _, name in selected[:5])
+        if len(selected) > 5:
+            names_preview += f" и ещё {len(selected) - 5}"
+
+        if not messagebox.askyesno(
+            "Подтверждение",
+            f"Удалить выбранные приложения ({len(selected)}):\n\n"
+            f"{names_preview}\n\nЭто действие нельзя отменить."
+        ):
+            return
+
+        self.status_manager.set_status(
+            text=f"Удаление {len(selected)} приложений...",
+            color="orange",
+            priority=1
+        )
         self.refresh_uwp_btn.configure(state="disabled")
-        
+        self.remove_selected_uwp_btn.configure(state="disabled")
+
         def remove_thread():
             try:
-                success = self.uwp_remover.remove_app(package_name)
-                self._uwp_remove_queue.put(("done", success, app_name))  # кладём в очередь
+                success_count = 0
+                for package_name, _ in selected:
+                    if self.uwp_remover.remove_app(package_name):
+                        success_count += 1
+                self._uwp_remove_queue.put(("bulk_done", success_count, len(selected)))  # кладём в очередь
             except Exception as e:
-                self._uwp_remove_queue.put(("error", str(e), app_name))
-                
+                self._uwp_remove_queue.put(("error", str(e), "bulk"))
+
         threading.Thread(target=remove_thread, daemon=True).start()
-        self._poll_uwp_remove_queue()  # опрашиваем очередь
+        self._poll_uwp_remove_queue()  # опрашиваем очередь 
     
     def _poll_uwp_remove_queue(self):
         """Опрос очереди удаления UWP-приложений в главном потоке."""
@@ -575,17 +596,44 @@ class BestWinTweaker:
 
         if status == "done":
             if result:
-                self.status_manager.set_status(f"✓ {app_name} удалено", "green", priority=1, timeout=3000)
+                self.status_manager.set_status(f"{app_name} удалено", "green", priority=1, timeout=3000)
                 self.load_uwp_apps()
             else:
-                self.status_manager.set_status(f"✗ Ошибка при удалении {app_name}", "red", priority=2, timeout=5000)
+                self.status_manager.set_status(f"Ошибка при удалении {app_name}", "red", priority=2, timeout=5000)
                 self.refresh_uwp_btn.configure(state="normal")
-        else:  # "error"
-            self.status_manager.set_status(f"✗ Ошибка: {result}", "red", priority=2, timeout=5000)
+        elif status == "bulk_done":
             self.refresh_uwp_btn.configure(state="normal")
+            self.remove_selected_uwp_btn.configure(state="normal")
+            if result > 0:
+                self.status_manager.set_status(
+                    f"Удалено приложений: {result} из {app_name}",
+                    "green",
+                    priority=1,
+                    timeout=5000
+                )
+                self.load_uwp_apps()
+            else:
+                self.status_manager.set_status(
+                    "Не удалось удалить ни одного приложения",
+                    "red",
+                    priority=2,
+                    timeout=5000
+                )
+        else:  # "error"
+            self.refresh_uwp_btn.configure(state="normal")
+            self.remove_selected_uwp_btn.configure(state="normal")
+            self.status_manager.set_status(f"Ошибка: {result}", "red", priority=2, timeout=5000)
     
     def setup_monitor_tab(self):
         """Настройка вкладки мониторинга"""
+        # Заголовок
+        title_label = ctk.CTkLabel(
+            self.monitor_tab,
+            text="Мониторинг системы",
+            font=ctk.CTkFont(size=24, weight="bold")
+        )
+        title_label.pack(pady=(5, 20))
+        
         # Левая колонка
         left_column = ctk.CTkFrame(self.monitor_tab)
         left_column.pack(side="left", fill="both", expand=True, padx=5)
@@ -602,20 +650,19 @@ class BestWinTweaker:
         self.create_network_section(right_column)
         self.create_disk_section(right_column)
 
-
     def setup_optimize_tab(self):
         """Настройка вкладки оптимизации"""
-        # Контейнер для кнопок
-        buttons_container = ctk.CTkFrame(self.optimize_tab)
-        buttons_container.pack(fill="both", expand=True, padx=20, pady=20)
-
         # Заголовок
         title_label = ctk.CTkLabel(
-            buttons_container,
+            self.optimize_tab,
             text="Инструменты оптимизации системы",
             font=ctk.CTkFont(size=24, weight="bold")
         )
         title_label.pack(pady=(5, 20))
+        
+        # Контейнер для кнопок
+        buttons_container = ctk.CTkFrame(self.optimize_tab)
+        buttons_container.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Фрейм для кнопок (сетка 4x3)
         buttons_grid = ctk.CTkFrame(buttons_container)
@@ -1004,17 +1051,19 @@ class BestWinTweaker:
     def setup_about_tab(self):
         """Настройка вкладки О программе"""
         # Заголовок
-        header_frame = ctk.CTkFrame(self.about_tab)
-        header_frame.pack(fill="both", expand=True, padx=20, pady=(20, 10))
         title_label = ctk.CTkLabel(
-            header_frame,
+            self.about_tab,
             text="О программе",
-            font=ctk.CTkFont(size=20, weight="bold")
+            font=ctk.CTkFont(size=24, weight="bold")
         )
         title_label.pack(side="top", pady=(5, 20))
-
+        
+        # Контейнер для содержимого
+        main_container = ctk.CTkFrame(self.about_tab)
+        main_container.pack(fill="both", expand=True, padx=20, pady=20)
+        
         # Центральный фрейм для логотипа
-        logo_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        logo_frame = ctk.CTkFrame(main_container, fg_color="transparent")
         logo_frame.pack(pady=0)
 
         try:
@@ -1029,36 +1078,21 @@ class BestWinTweaker:
         except Exception as e:
             print(f"Ошибка загрузки логотипа: {e}")
 
-        ctk.CTkLabel(header_frame, text="Ускорение ПК в пару кликов!", font=ctk.CTkFont(size=14)).pack()
-        ctk.CTkLabel(header_frame, text=f"BestWinTweaker, v. {VERSION}", font=ctk.CTkFont(size=14)).pack()
-        GitHubLink = ctk.CTkLabel(header_frame, text="VladislavBanitsky", cursor="hand2", font=ctk.CTkFont(size=14))
+        ctk.CTkLabel(main_container, text="Ускорение ПК в пару кликов!", font=ctk.CTkFont(size=14)).pack()
+        ctk.CTkLabel(main_container, text=f"BestWinTweaker, v. {VERSION}", font=ctk.CTkFont(size=14)).pack()
+        GitHubLink = ctk.CTkLabel(main_container, text="VladislavBanitsky", cursor="hand2", font=ctk.CTkFont(size=14))
         GitHubLink.pack()
         GitHubLink.bind("<Button-1>", lambda e: callback("https://github.com/VladislavBanitsky/BestWinTweaker"))
 
     def setup_autostart_tab(self):
         """Настройка вкладки автозагрузки"""
-        # Заголовок
-        header_frame = ctk.CTkFrame(self.autostart_tab)
-        header_frame.pack(fill="x", padx=20, pady=(20, 0))
-
+        
         title_label = ctk.CTkLabel(
-            header_frame,
+            self.autostart_tab,
             text="Управление автозагрузкой",
-            font=ctk.CTkFont(size=20, weight="bold")
+            font=ctk.CTkFont(size=24, weight="bold")
         )
-        title_label.pack(side="left")
-
-        # Кнопки управления
-        btn_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
-        btn_frame.pack(side="right")
-
-        self.refresh_autostart_btn = ctk.CTkButton(
-            btn_frame,
-            text="Обновить",
-            command=self.load_autostart_programs,
-            width=100
-        )
-        self.refresh_autostart_btn.pack(side="left", padx=5)
+        title_label.pack(pady=(5, 20))       
 
         # Контейнер со скроллом для списка программ
         self.autostart_container = ctk.CTkScrollableFrame(self.autostart_tab)
@@ -1067,7 +1101,7 @@ class BestWinTweaker:
         # Кнопки управления
         control_frame = ctk.CTkFrame(self.autostart_tab)
         control_frame.pack(fill="x", padx=20, pady=10)
-
+        
         self.apply_autostart_btn = ctk.CTkButton(
             control_frame,
             text="Применить изменения",
@@ -1076,7 +1110,15 @@ class BestWinTweaker:
             font=ctk.CTkFont(size=14, weight="bold")
         )
         self.apply_autostart_btn.pack(side="left", padx=5)
-
+        
+        self.refresh_autostart_btn = ctk.CTkButton(
+            control_frame,
+            text="Обновить",
+            command=self.load_autostart_programs,
+            width=100
+        )
+        self.refresh_autostart_btn.pack(side="left", padx=5)
+        
         self.select_all_btn = ctk.CTkButton(
             control_frame,
             text="Выбрать все",
@@ -2108,20 +2150,17 @@ class BestWinTweaker:
         self._processes_refresh_job = None
         self._initial_load_done = False
         self._processes_last_full_ts = 0  # 0 → сразу «устарело»
-        
-        main_frame = ctk.CTkFrame(self.processes_tab)
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         # ---------- Верхняя панель ----------
-        top_frame = ctk.CTkFrame(main_frame)
+        title_label = ctk.CTkLabel(
+            self.processes_tab,
+            text="Управление процессами",
+            font=ctk.CTkFont(size=24, weight="bold")
+        )
+        title_label.pack(pady=(5, 20))
+        
+        top_frame = ctk.CTkFrame(self.processes_tab)
         top_frame.pack(fill="x", padx=5, pady=(0, 5))
-
-        ctk.CTkLabel(
-            top_frame,
-            text="Системные процессы",
-            font=ctk.CTkFont(size=18, weight="bold")
-        ).pack(side="left", padx=10)
-
         btn_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
         btn_frame.pack(side="right")
 
@@ -2133,10 +2172,10 @@ class BestWinTweaker:
             width=140,
             height=30,
         )
-        self.refresh_processes_btn.pack(side="left", padx=5)
+        self.refresh_processes_btn.pack(side="left", padx=10)
 
         # Чекбокс автообновления (только быстрые метрики)
-        self.auto_refresh_var = tk.BooleanVar(value=True)
+        self.auto_refresh_var = tk.BooleanVar(value=False)
         self.auto_refresh_check = ctk.CTkCheckBox(
             btn_frame,
             text="Автообновление",
@@ -2169,9 +2208,9 @@ class BestWinTweaker:
 
         # ---------- Заголовки + панель действий + список ----------
         self.create_process_actions(top_frame)
-        self.create_processes_header(main_frame)
+        self.create_processes_header(self.processes_tab)
                 
-        self.processes_container = ctk.CTkScrollableFrame(main_frame, height=400)
+        self.processes_container = ctk.CTkScrollableFrame(self.processes_tab, height=400)
         self.processes_container.pack(fill="both", expand=True, padx=5, pady=5)
 
         # ---------- Первичная загрузка + автообновление ----------
@@ -2343,7 +2382,7 @@ class BestWinTweaker:
             height=30,
             state="disabled"
         )
-        self.details_btn.pack(side="left", padx=3)
+        self.details_btn.pack(side="left", padx=5)
         
         # Кнопка "Приостановить"
         self.suspend_btn = ctk.CTkButton(
@@ -2356,7 +2395,7 @@ class BestWinTweaker:
             fg_color="orange",
             hover_color="darkorange"
         )
-        self.suspend_btn.pack(side="left", padx=3)
+        self.suspend_btn.pack(side="left", padx=10)
         
         # Кнопка "Завершить"
         self.kill_btn = ctk.CTkButton(
@@ -2369,7 +2408,7 @@ class BestWinTweaker:
             fg_color="red",
             hover_color="darkred"
         )
-        self.kill_btn.pack(side="left", padx=3)
+        self.kill_btn.pack(side="left", padx=5)
     
     def load_processes(self):
         """Асинхронная загрузка списка процессов"""
