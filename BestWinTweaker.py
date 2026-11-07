@@ -635,12 +635,12 @@ class BestWinTweaker:
         title_label.pack(pady=(5, 20))
         
         # Левая колонка
-        left_column = ctk.CTkFrame(self.monitor_tab)
-        left_column.pack(side="left", fill="both", expand=True, padx=5)
+        left_column = ctk.CTkFrame(self.monitor_tab, fg_color="transparent")
+        left_column.pack(side="left", fill="both", expand=True)
 
         # Правая колонка
-        right_column = ctk.CTkFrame(self.monitor_tab)
-        right_column.pack(side="right", fill="both", expand=True, padx=5)
+        right_column = ctk.CTkFrame(self.monitor_tab, fg_color="transparent")
+        right_column.pack(side="right", fill="both", expand=True)
 
         # Создаем секции
         self.create_cpu_section(left_column)
