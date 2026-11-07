@@ -106,7 +106,7 @@ class BestWinTweaker:
         Если сохранённой геометрии нет — окно центрируется с дефолтным размером.
         Корректно работает при любом DPI-масштабе ОС.
         """
-        default_w, default_h = 1450, 690
+        default_w, default_h = 1400, 690
 
         # Нужно, чтобы окно уже существовало и Tk знал его DPI-scaling
         self.window.update_idletasks()
@@ -387,7 +387,7 @@ class BestWinTweaker:
             text="Управление UWP-приложениями",
             font=ctk.CTkFont(size=24, weight="bold")
         )
-        title_label.pack(pady=(5, 20))
+        title_label.pack(pady=(5, 5))
         
         # Контейнер со скроллом
         self.uwp_container = ctk.CTkScrollableFrame(self.uwp_tab)
@@ -632,7 +632,7 @@ class BestWinTweaker:
             text="Мониторинг системы",
             font=ctk.CTkFont(size=24, weight="bold")
         )
-        title_label.pack(pady=(5, 20))
+        title_label.pack(pady=(5, 5))
         
         # Левая колонка
         left_column = ctk.CTkFrame(self.monitor_tab, fg_color="transparent")
@@ -658,7 +658,7 @@ class BestWinTweaker:
             text="Инструменты оптимизации системы",
             font=ctk.CTkFont(size=24, weight="bold")
         )
-        title_label.pack(pady=(5, 20))
+        title_label.pack(pady=(5, 5))
         
         # Контейнер для кнопок
         buttons_container = ctk.CTkFrame(self.optimize_tab)
@@ -1056,7 +1056,7 @@ class BestWinTweaker:
             text="О программе",
             font=ctk.CTkFont(size=24, weight="bold")
         )
-        title_label.pack(side="top", pady=(5, 20))
+        title_label.pack(side="top", pady=(5, 5))
         
         # Контейнер для содержимого
         main_container = ctk.CTkFrame(self.about_tab)
@@ -1092,7 +1092,7 @@ class BestWinTweaker:
             text="Управление автозагрузкой",
             font=ctk.CTkFont(size=24, weight="bold")
         )
-        title_label.pack(pady=(5, 20))       
+        title_label.pack(pady=(5, 5))       
 
         # Контейнер со скроллом для списка программ
         self.autostart_container = ctk.CTkScrollableFrame(self.autostart_tab)
@@ -2157,7 +2157,7 @@ class BestWinTweaker:
             text="Управление процессами",
             font=ctk.CTkFont(size=24, weight="bold")
         )
-        title_label.pack(pady=(5, 20))
+        title_label.pack(pady=(5, 5))
         
         top_frame = ctk.CTkFrame(self.processes_tab)
         top_frame.pack(fill="x", padx=5, pady=(0, 5))
